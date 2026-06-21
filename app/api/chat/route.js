@@ -85,7 +85,7 @@ export async function POST(req) {
           systemInstruction: {
             parts: [{ text: systemPrompt }],
           },
-          // 1. Model Optimization: Use gemini-1.5-flash and configure for extreme efficiency.
+          // 1. Model Optimization: Use gemini-2.5-flash and configure for extreme efficiency.
           generationConfig: {
             maxOutputTokens: 800,
             temperature: 0.4, // Lower temperature keeps model responses focused and efficient
@@ -102,7 +102,7 @@ export async function POST(req) {
         }
 
         return fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
           {
             method: "POST",
             headers: {
