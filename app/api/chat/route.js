@@ -1,8 +1,8 @@
 // app/api/chat/route.js
 //
 // এই ফাইলটা Next.js App Router-এর একটা সার্ভারলেস API রুট।
-// ফ্রন্টএন্ড (ChatWidget.js) এখানে মেসেজ পাঠাবে, এটা Claude API কল করে উত্তর ফেরত পাঠাবে।
-// আপনার API key ব্রাউজারে কখনো যাবে না — এটা সবসময় সার্ভার সাইডে থাকে, এটাই নিরাপদ পদ্ধতি।
+// ফ্রন্টএন্ড (ChatWidget.js) এখানে মেসেজ পাঠাবে, এটা Gemini API কল করে উত্তর ফেরত পাঠাবে।
+// প্রজেক্টের উচ্চ ট্রাফিক সামলানোর জন্য এতে ক্যাশিং, কী-রোটেশন এবং ফেলাইওভার মেকানিজম যুক্ত করা হয়েছে।
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
 
@@ -12,21 +12,17 @@ const apiConfig = {
   currentIndex: 0
 };
 
-// Dynamically scan and load all GEMINI keys from environment variables
+// Load API Keys: GEMINI_KEY_1 to GEMINI_KEY_22 plus fallbacks
 const loadApiKeys = () => {
   const loadedKeys = [];
   
-  // Find all keys matching GEMINI_KEY_1, GEMINI_KEY_2, etc., dynamically
-  const envKeys = Object.keys(process.env)
-    .filter((key) => key.startsWith("GEMINI_KEY_"))
-    .sort((a, b) => {
-      const numA = parseInt(a.replace("GEMINI_KEY_", ""), 10) || 0;
-      const numB = parseInt(b.replace("GEMINI_KEY_", ""), 10) || 0;
-      return numA - numB;
-    })
-    .map((key) => process.env[key]);
-
-  loadedKeys.push(...envKeys);
+  // Explicitly check for GEMINI_KEY_1 to GEMINI_KEY_22
+  for (let i = 1; i <= 22; i++) {
+    const key = process.env[`GEMINI_KEY_${i}`];
+    if (key) {
+      loadedKeys.push(key);
+    }
+  }
 
   // Fallback to GEMINI_API_KEY
   if (process.env.GEMINI_API_KEY) {
@@ -36,7 +32,7 @@ const loadApiKeys = () => {
   // Hardcoded fallback key
   loadedKeys.push("AQ.Ab8RN6K3SHM-kHU4RPC_rhoW8OEO5TCxj70Zj0e13xWO1pWUEQ");
 
-  // Filter out any empty/undefined keys and remove duplicates
+  // Remove empty keys and duplicates
   apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
 };
 
@@ -45,7 +41,7 @@ loadApiKeys();
 
 /**
  * Tracks and returns the current active Gemini API key.
- * Rotates to the next key if forceRotate is true (e.g., when a request fails with 429).
+ * Rotates to the next key if forceRotate is true.
  */
 function getValidApiKey(forceRotate = false) {
   if (apiConfig.keys.length === 0) return null;
@@ -56,6 +52,33 @@ function getValidApiKey(forceRotate = false) {
   return apiConfig.keys[apiConfig.currentIndex];
 }
 
+// In-Memory Cache for Duplicate Queries
+const cache = new Map();
+const CACHE_TTL_MS = 45 * 60 * 1000; // 45 Minutes TTL
+
+// Periodically clean up expired cache entries to prevent memory leaks
+if (global.cacheCleanupInterval) {
+  clearInterval(global.cacheCleanupInterval);
+}
+global.cacheCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of cache.entries()) {
+    if (now - value.timestamp > CACHE_TTL_MS) {
+      cache.delete(key);
+    }
+  }
+}, 10 * 60 * 1000); // runs every 10 minutes
+
+// Helper to normalize user questions
+function getNormalizedQuestion(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      return messages[i].content.toLowerCase().trim();
+    }
+  }
+  return "";
+}
+
 export async function POST(req) {
   try {
     const { messages } = await req.json();
@@ -64,16 +87,24 @@ export async function POST(req) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
 
-    // 4. Token Management: Truncate history before sending to the Gemini API.
-    // Include user's latest query + previous 5 turns of conversation (10 messages).
-    // Total max messages: 11.
-    const maxHistoryCount = 11;
-    const truncatedHistory = messages.slice(-maxHistoryCount);
+    // 1. In-Memory Cache Lookup (Deflects concurrent duplicate queries)
+    const normQuestion = getNormalizedQuestion(messages);
+    if (normQuestion) {
+      const cachedEntry = cache.get(normQuestion);
+      if (cachedEntry && (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS)) {
+        console.log(`[Cache Hit] Serving cached response for: "${normQuestion}"`);
+        return Response.json({ reply: cachedEntry.reply });
+      }
+    }
 
-    // ১. যদি Gemini API Keys থাকে, তাহলে সেটি ব্যবহার করুন (Google Gemini API - ফ্রি টায়ারে পাওয়া যায়)
+    // 2. Token & History Optimization: Slice to include ONLY the last 4 messages.
+    // Extremely critical to prevent TPM throttling under high traffic.
+    const truncatedHistory = messages.slice(-4);
+
     if (apiConfig.keys.length > 0) {
       const systemPrompt = buildSystemPrompt();
 
+      // Function to trigger generateContent request
       const makeRequest = async (apiKey, useSearch) => {
         const contents = truncatedHistory.map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
@@ -85,10 +116,9 @@ export async function POST(req) {
           systemInstruction: {
             parts: [{ text: systemPrompt }],
           },
-          // 1. Model Optimization: Use gemini-2.5-flash and configure for extreme efficiency.
           generationConfig: {
             maxOutputTokens: 800,
-            temperature: 0.4, // Lower temperature keeps model responses focused and efficient
+            temperature: 0.4,
             topP: 0.95,
           },
         };
@@ -118,61 +148,66 @@ export async function POST(req) {
       let replyText = null;
       const totalKeys = apiConfig.keys.length;
 
+      // 3. Multi-Layered Resilient Retry Loop
       for (let attempt = 0; attempt < totalKeys; attempt++) {
         const currentKey = getValidApiKey();
         if (!currentKey) break;
 
         console.log(`[Gemini API] Attempt ${attempt + 1}/${totalKeys} using key index ${apiConfig.currentIndex}`);
 
-        // Step 1: Attempt call with google_search tool enabled (using current key)
+        // Step A: Attempt with Google Search enabled
         let response = await makeRequest(currentKey, true);
 
-        // Step 2 (Tool-Fallback): If Step 1 returns a 429 or error, retry with same key but WITHOUT tools array
+        // Step B: Fallback (Retry same key WITHOUT search if Step A fails)
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          console.error(`[Gemini API] Step 1 (Search) failed on key index ${apiConfig.currentIndex}:`, errData);
+          console.error(`[Gemini API] Search request failed on key index ${apiConfig.currentIndex}:`, errData);
 
-          console.log(`[Gemini API] Retrying without Google Search tool using key index ${apiConfig.currentIndex} (Step 2)...`);
+          console.log(`[Gemini API] Retrying same key index ${apiConfig.currentIndex} WITHOUT Google Search...`);
           response = await makeRequest(currentKey, false);
         }
 
-        // Process response if successful
+        // Process successful response
         if (response.ok) {
           const data = await response.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
             replyText = text;
             success = true;
-            break; // Break out of the key loop on success
+            break; // Break the key loop on success
           } else {
-            console.warn(`[Gemini API] Success code but candidates text empty on key index ${apiConfig.currentIndex}.`);
+            console.warn(`[Gemini API] Response OK but content empty on key index ${apiConfig.currentIndex}.`);
           }
         } else {
           const errData = await response.json().catch(() => ({}));
-          console.error(`[Gemini API] Step 2 (No-Search Fallback) failed on key index ${apiConfig.currentIndex}:`, errData);
+          console.error(`[Gemini API] Fallback request also failed on key index ${apiConfig.currentIndex}:`, errData);
         }
 
-        // Step 3 (Key-Fallback): If Step 2 fails, log a "Key exhausted" warning, pick NEXT API key and retry
-        console.warn(`[Gemini API] Key exhausted warning: API key index ${apiConfig.currentIndex} failed.`);
-        getValidApiKey(true); // Rotate to next API key
+        // Step C: If both steps failed on current key, rotate index and continue loop
+        getValidApiKey(true);
       }
 
-      if (success) {
+      if (success && replyText) {
+        // Cache the successful response
+        if (normQuestion) {
+          cache.set(normQuestion, {
+            reply: replyText,
+            timestamp: Date.now()
+          });
+        }
         return Response.json({ reply: replyText });
       }
 
-      // If we fall through the loop, Gemini fails. Since the system expects step 4 to return Service temporarily unavailable:
-      // Step 4 (Final Stop): If all keys fail, return a clean { error: "Service temporarily unavailable" } response
-      console.error("[Gemini API] All Gemini API keys failed or were exhausted.");
+      console.error("[Gemini API] All API keys failed or were exhausted.");
       return Response.json(
         { error: "Service temporarily unavailable" },
         { status: 503 }
       );
     }
 
-    // ২. যদি ANTHROPIC_API_KEY থাকে, তাহলে সেটি ব্যবহার করুন (Claude API)
+    // Fallback block for Anthropic API
     if (process.env.ANTHROPIC_API_KEY) {
-      const trimmedHistory = messages.slice(-10).map((m) => ({
+      const trimmedHistory = messages.slice(-4).map((m) => ({
         role: m.role === "assistant" ? "assistant" : "user",
         content: m.content,
       }));
@@ -207,7 +242,6 @@ export async function POST(req) {
       }
     }
 
-    // ৩. কোনো API Key না থাকলে এরর ফেরত দিন
     return Response.json({
       reply: "দুঃখিত, কোনো এআই সার্ভিস চ্যাটবটের সাথে সংযুক্ত নেই। অনুগ্রহ করে আপনার API Key কনফিগার করুন।"
     });
