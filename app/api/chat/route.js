@@ -6,6 +6,56 @@
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
 
+// Configuration for Gemini API key rotation
+const apiConfig = {
+  keys: [],
+  currentIndex: 0
+};
+
+// Dynamically scan and load all GEMINI keys from environment variables
+const loadApiKeys = () => {
+  const loadedKeys = [];
+  
+  // Find all keys matching GEMINI_KEY_1, GEMINI_KEY_2, etc., dynamically
+  const envKeys = Object.keys(process.env)
+    .filter((key) => key.startsWith("GEMINI_KEY_"))
+    .sort((a, b) => {
+      const numA = parseInt(a.replace("GEMINI_KEY_", ""), 10) || 0;
+      const numB = parseInt(b.replace("GEMINI_KEY_", ""), 10) || 0;
+      return numA - numB;
+    })
+    .map((key) => process.env[key]);
+
+  loadedKeys.push(...envKeys);
+
+  // Fallback to GEMINI_API_KEY
+  if (process.env.GEMINI_API_KEY) {
+    loadedKeys.push(process.env.GEMINI_API_KEY);
+  }
+
+  // Hardcoded fallback key
+  loadedKeys.push("AQ.Ab8RN6K3SHM-kHU4RPC_rhoW8OEO5TCxj70Zj0e13xWO1pWUEQ");
+
+  // Filter out any empty/undefined keys and remove duplicates
+  apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
+};
+
+// Initialize the keys array
+loadApiKeys();
+
+/**
+ * Tracks and returns the current active Gemini API key.
+ * Rotates to the next key if forceRotate is true (e.g., when a request fails with 429).
+ */
+function getValidApiKey(forceRotate = false) {
+  if (apiConfig.keys.length === 0) return null;
+  if (forceRotate) {
+    apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
+    console.warn(`[Gemini API Key Rotation] Rotated to key index ${apiConfig.currentIndex}`);
+  }
+  return apiConfig.keys[apiConfig.currentIndex];
+}
+
 export async function POST(req) {
   try {
     const { messages } = await req.json();
@@ -14,22 +64,32 @@ export async function POST(req) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
 
-    // ১. যদি GEMINI_API_KEY থাকে, তাহলে সেটি ব্যবহার করুন (Google Gemini API - ফ্রি টায়ারে পাওয়া যায়)
-    const geminiKey = process.env.GEMINI_API_KEY || "AQ.Ab8RN6K3SHM-kHU4RPC_rhoW8OEO5TCxj70Zj0e13xWO1pWUEQ";
-    if (geminiKey) {
-      const contents = messages.slice(-10).map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
+    // 4. Token Management: Truncate history before sending to the Gemini API.
+    // Include user's latest query + previous 5 turns of conversation (10 messages).
+    // Total max messages: 11.
+    const maxHistoryCount = 11;
+    const truncatedHistory = messages.slice(-maxHistoryCount);
 
-      const makeRequest = async (useSearch) => {
+    // ১. যদি Gemini API Keys থাকে, তাহলে সেটি ব্যবহার করুন (Google Gemini API - ফ্রি টায়ারে পাওয়া যায়)
+    if (apiConfig.keys.length > 0) {
+      const systemPrompt = buildSystemPrompt();
+
+      const makeRequest = async (apiKey, useSearch) => {
+        const contents = truncatedHistory.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        }));
+
         const bodyObj = {
           contents: contents,
           systemInstruction: {
-            parts: [{ text: buildSystemPrompt() }],
+            parts: [{ text: systemPrompt }],
           },
+          // 1. Model Optimization: Use gemini-1.5-flash and configure for extreme efficiency.
           generationConfig: {
             maxOutputTokens: 800,
+            temperature: 0.4, // Lower temperature keeps model responses focused and efficient
+            topP: 0.95,
           },
         };
 
@@ -42,50 +102,72 @@ export async function POST(req) {
         }
 
         return fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-goog-api-key": geminiKey,
+              "x-goog-api-key": apiKey,
             },
             body: JSON.stringify(bodyObj),
           }
         );
       };
 
-      let response = await makeRequest(true);
+      let success = false;
+      let replyText = null;
+      const totalKeys = apiConfig.keys.length;
 
-      // যদি প্রথমবার ফেইল করে (যেমন গুগল সার্চ টুলের লিমিট/কোটার কারণে), তাহলে সার্চ ছাড়া আবার চেষ্টা করুন
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        console.error("Gemini API error (with search):", errData);
-        
-        console.log("Retrying Gemini API request without Google Search...");
-        response = await makeRequest(false);
+      for (let attempt = 0; attempt < totalKeys; attempt++) {
+        const currentKey = getValidApiKey();
+        if (!currentKey) break;
+
+        console.log(`[Gemini API] Attempt ${attempt + 1}/${totalKeys} using key index ${apiConfig.currentIndex}`);
+
+        // Step 1: Attempt call with google_search tool enabled (using current key)
+        let response = await makeRequest(currentKey, true);
+
+        // Step 2 (Tool-Fallback): If Step 1 returns a 429 or error, retry with same key but WITHOUT tools array
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          console.error(`[Gemini API] Step 1 (Search) failed on key index ${apiConfig.currentIndex}:`, errData);
+
+          console.log(`[Gemini API] Retrying without Google Search tool using key index ${apiConfig.currentIndex} (Step 2)...`);
+          response = await makeRequest(currentKey, false);
+        }
+
+        // Process response if successful
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            replyText = text;
+            success = true;
+            break; // Break out of the key loop on success
+          } else {
+            console.warn(`[Gemini API] Success code but candidates text empty on key index ${apiConfig.currentIndex}.`);
+          }
+        } else {
+          const errData = await response.json().catch(() => ({}));
+          console.error(`[Gemini API] Step 2 (No-Search Fallback) failed on key index ${apiConfig.currentIndex}:`, errData);
+        }
+
+        // Step 3 (Key-Fallback): If Step 2 fails, log a "Key exhausted" warning, pick NEXT API key and retry
+        console.warn(`[Gemini API] Key exhausted warning: API key index ${apiConfig.currentIndex} failed.`);
+        getValidApiKey(true); // Rotate to next API key
       }
 
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          return Response.json({ reply: text });
-        }
-        return Response.json({
-          reply: "দুঃখিত, এআই সার্ভিস কোনো উত্তর তৈরি করতে পারেনি। অনুগ্রহ করে আবার চেষ্টা করুন।"
-        });
-      } else {
-        const errData = await response.json().catch(() => ({}));
-        console.error("Gemini API fallback error:", errData);
-        if (response.status === 429 || errData.error?.status === "RESOURCE_EXHAUSTED") {
-          return Response.json({
-            reply: "দুঃখিত, এআই সার্ভিসের ফ্রি কোটা সাময়িকভাবে শেষ হয়ে গেছে। অনুগ্রহ করে ১ মিনিট পর আবার চেষ্টা করুন।"
-          });
-        }
-        return Response.json({
-          reply: "দুঃখিত, এআই সার্ভিসে একটি সমস্যা হয়েছে। অনুগ্রহ করে একটু পর আবার চেষ্টা করুন।"
-        });
+      if (success) {
+        return Response.json({ reply: replyText });
       }
+
+      // If we fall through the loop, Gemini fails. Since the system expects step 4 to return Service temporarily unavailable:
+      // Step 4 (Final Stop): If all keys fail, return a clean { error: "Service temporarily unavailable" } response
+      console.error("[Gemini API] All Gemini API keys failed or were exhausted.");
+      return Response.json(
+        { error: "Service temporarily unavailable" },
+        { status: 503 }
+      );
     }
 
     // ২. যদি ANTHROPIC_API_KEY থাকে, তাহলে সেটি ব্যবহার করুন (Claude API)
