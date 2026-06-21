@@ -10,10 +10,11 @@ import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer } from "../.
 // Configuration for Gemini API key rotation
 const apiConfig = {
   keys: [],
-  currentIndex: 0
+  currentIndex: 0,
+  isInitialized: false
 };
 
-// Load API Keys: GEMINI_KEY_1 to GEMINI_KEY_22 plus fallbacks
+// Load API Keys: GEMINI_KEY_2 to GEMINI_KEY_22 plus fallbacks dynamically at runtime
 const loadApiKeys = () => {
   const loadedKeys = [];
   
@@ -37,12 +38,13 @@ const loadApiKeys = () => {
   apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
 
   // Randomize initial index to load balance requests across all keys in serverless containers
-  if (apiConfig.keys.length > 0) {
+  if (!apiConfig.isInitialized && apiConfig.keys.length > 0) {
     apiConfig.currentIndex = Math.floor(Math.random() * apiConfig.keys.length);
+    apiConfig.isInitialized = true;
   }
 };
 
-// Initialize the keys array
+// Initialize the keys array (runs once on compile, and will be re-run inside POST at runtime)
 loadApiKeys();
 
 /**
@@ -92,6 +94,9 @@ export async function POST(req) {
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
+
+    // Re-evaluate environment keys dynamically at runtime to prevent serverless build-time environment variable caching
+    loadApiKeys();
 
     // 1. Cache & Persistent Storage Lookup (Deflects duplicate queries)
     const normQuestion = getNormalizedQuestion(messages);
