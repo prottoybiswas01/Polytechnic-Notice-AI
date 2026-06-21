@@ -17,8 +17,8 @@ const apiConfig = {
 const loadApiKeys = () => {
   const loadedKeys = [];
   
-  // Explicitly check for GEMINI_KEY_1 to GEMINI_KEY_22
-  for (let i = 1; i <= 22; i++) {
+  // Skip GEMINI_KEY_1 as it is verified to be invalid (401 Unauthorized)
+  for (let i = 2; i <= 22; i++) {
     const key = process.env[`GEMINI_KEY_${i}`];
     if (key) {
       loadedKeys.push(key);
@@ -35,6 +35,11 @@ const loadApiKeys = () => {
 
   // Remove empty keys and duplicates
   apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
+
+  // Randomize initial index to load balance requests across all keys in serverless containers
+  if (apiConfig.keys.length > 0) {
+    apiConfig.currentIndex = Math.floor(Math.random() * apiConfig.keys.length);
+  }
 };
 
 // Initialize the keys array
