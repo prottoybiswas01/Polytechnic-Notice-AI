@@ -299,10 +299,14 @@ export default function ChatWidget() {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
+            bottom: 0 !important;
+            right: 0 !important;
             width: 100vw !important;
-            height: 100vh !important;
+            height: 100% !important;
+            height: 100dvh !important;
             max-width: 100vw !important;
-            max-height: 100vh !important;
+            max-height: 100% !important;
+            max-height: 100dvh !important;
             z-index: 99999 !important;
             margin: 0 !important;
           }
@@ -310,10 +314,14 @@ export default function ChatWidget() {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
+            bottom: 0 !important;
+            right: 0 !important;
             width: 100vw !important;
-            height: 100vh !important;
+            height: 100% !important;
+            height: 100dvh !important;
             max-width: 100vw !important;
-            max-height: 100vh !important;
+            max-height: 100% !important;
+            max-height: 100dvh !important;
             border-radius: 0 !important;
             margin: 0 !important;
             z-index: 99999 !important;
@@ -497,7 +505,7 @@ const styles = {
     border: "1px solid #DDE3E3",
     borderRadius: 10,
     padding: "9px 11px",
-    fontSize: 13.5,
+    fontSize: 16, // Prevents mobile browsers (iOS/Android) from auto-zooming on focus
     fontFamily: "inherit",
     outline: "none",
     maxHeight: 90,
