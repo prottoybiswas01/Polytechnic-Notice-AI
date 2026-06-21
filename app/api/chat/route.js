@@ -3,10 +3,8 @@
 // এই ফাইলটা Next.js App Router-এর একটা সার্ভারলেস API রুট।
 // ফ্রন্টএন্ড (ChatWidget.js) এখানে মেসেজ পাঠাবে, এটা Claude API কল করে উত্তর ফেরত পাঠাবে।
 // আপনার API key ব্রাউজারে কখনো যাবে না — এটা সবসময় সার্ভার সাইডে থাকে, এটাই নিরাপদ পদ্ধতি।
-// যদি কোনো API key না থাকে, এটি স্বয়ংক্রিয়ভাবে একটি ফ্রি অফলাইন এআই ইঞ্জিনে অফলোড হবে।
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
-import { getFreeResponse } from "../../../lib/freeBot";
 
 export async function POST(req) {
   try {
@@ -56,8 +54,16 @@ export async function POST(req) {
           return Response.json({ reply: text });
         }
       } else {
-        const errText = await response.text();
-        console.error("Gemini API error:", errText);
+        const errData = await response.json().catch(() => ({}));
+        console.error("Gemini API error:", errData);
+        if (response.status === 429 || errData.error?.status === "RESOURCE_EXHAUSTED") {
+          return Response.json({
+            reply: "দুঃখিত, এআই সার্ভিসের ফ্রি কোটা সাময়িকভাবে শেষ হয়ে গেছে। অনুগ্রহ করে ১ মিনিট পর আবার চেষ্টা করুন।"
+          });
+        }
+        return Response.json({
+          reply: "দুঃখিত, এআই সার্ভিসে একটি সমস্যা হয়েছে। অনুগ্রহ করে একটু পর আবার চেষ্টা করুন।"
+        });
       }
     }
 
@@ -92,23 +98,20 @@ export async function POST(req) {
       } else {
         const errText = await response.text();
         console.error("Anthropic API error:", errText);
+        return Response.json({
+          reply: "দুঃখিত, এআই সার্ভিসে একটি সমস্যা হয়েছে। অনুগ্রহ করে একটু পর আবার চেষ্টা করুন।"
+        });
       }
     }
 
-    // ৩. কোনো API Key না থাকলে অফলাইন ফ্রি ইঞ্জিনে ফলব্যাক হবে
-    const reply = getFreeResponse(messages);
-    return Response.json({ reply });
+    // ৩. কোনো API Key না থাকলে এরর ফেরত দিন
+    return Response.json({
+      reply: "দুঃখিত, কোনো এআই সার্ভিস চ্যাটবটের সাথে সংযুক্ত নেই। অনুগ্রহ করে আপনার API Key কনফিগার করুন।"
+    });
   } catch (err) {
     console.error("Chat route error:", err);
-    try {
-      // যেকোনো এররে সেফটি ফলব্যাক
-      const reply = getFreeResponse(messages);
-      return Response.json({ reply });
-    } catch (_) {
-      return Response.json(
-        { error: "সার্ভারে একটা সমস্যা হয়েছে। একটু পর আবার চেষ্টা করুন।" },
-        { status: 500 }
-      );
-    }
+    return Response.json({
+      reply: "দুঃখিত, সার্ভারে একটি কারিগরি ত্রুটি ঘটেছে। অনুগ্রহ করে একটু পর আবার চেষ্টা করুন।"
+    });
   }
 }
