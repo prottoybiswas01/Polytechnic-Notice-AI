@@ -46,6 +46,76 @@ function parseMarkdownToReact(text) {
     });
   };
 
+  const renderTextWithLinksAndBold = (txt) => {
+    if (!txt) return "";
+
+    const regex = /(\[.*?\]\(.*?\)|https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.gov\.bd|[a-zA-Z0-9-]+\.gov\.bd)/g;
+    const parts = txt.split(regex);
+
+    return parts.map((part, index) => {
+      if (!part) return null;
+
+      // 1. Markdown link [text](url)
+      if (part.startsWith("[") && part.includes("](") && part.endsWith(")")) {
+        const match = part.match(/\[(.*?)\]\((.*?)\)/);
+        if (match) {
+          const anchorText = match[1];
+          let url = match[2];
+          if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://" + url;
+          }
+          return (
+            <a
+              key={index}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: COLORS.accent, fontWeight: "600", textDecoration: "underline" }}
+            >
+              {anchorText}
+            </a>
+          );
+        }
+      }
+      // 2. Raw URL starting with http://, https://, or www.
+      else if (part.startsWith("http://") || part.startsWith("https://") || part.startsWith("www.")) {
+        let url = part;
+        if (part.startsWith("www.")) {
+          url = "https://" + part;
+        }
+        return (
+          <a
+            key={index}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: COLORS.accent, fontWeight: "600", textDecoration: "underline" }}
+          >
+            {part}
+          </a>
+        );
+      }
+      // 3. Domain ending in .gov.bd
+      else if (/\.gov\.bd/.test(part)) {
+        const url = "https://" + part;
+        return (
+          <a
+            key={index}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: COLORS.accent, fontWeight: "600", textDecoration: "underline" }}
+          >
+            {part}
+          </a>
+        );
+      }
+
+      // 4. Default: render bold formatting
+      return renderTextWithBold(part);
+    });
+  };
+
   const flushList = (key) => {
     if (currentList && listItems.length > 0) {
       const listStyle = currentList === "ul" 
@@ -76,21 +146,21 @@ function parseMarkdownToReact(text) {
       flushList(index);
       elements.push(
         <h4 key={index} style={{ margin: "8px 0 4px 0", fontWeight: "700", fontSize: "14px", color: COLORS.primaryDark }}>
-          {renderTextWithBold(trimmed.slice(4))}
+          {renderTextWithLinksAndBold(trimmed.slice(4))}
         </h4>
       );
     } else if (trimmed.startsWith("## ")) {
       flushList(index);
       elements.push(
         <h3 key={index} style={{ margin: "10px 0 5px 0", fontWeight: "700", fontSize: "15px", color: COLORS.primaryDark }}>
-          {renderTextWithBold(trimmed.slice(3))}
+          {renderTextWithLinksAndBold(trimmed.slice(3))}
         </h3>
       );
     } else if (trimmed.startsWith("# ")) {
       flushList(index);
       elements.push(
         <h2 key={index} style={{ margin: "12px 0 6px 0", fontWeight: "700", fontSize: "16px", color: COLORS.primaryDark }}>
-          {renderTextWithBold(trimmed.slice(2))}
+          {renderTextWithLinksAndBold(trimmed.slice(2))}
         </h2>
       );
     }
@@ -102,7 +172,7 @@ function parseMarkdownToReact(text) {
       }
       listItems.push(
         <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
-          {renderTextWithBold(trimmed.slice(2))}
+          {renderTextWithLinksAndBold(trimmed.slice(2))}
         </li>
       );
     }
@@ -116,7 +186,7 @@ function parseMarkdownToReact(text) {
       const contentText = match ? match[2] : trimmed;
       listItems.push(
         <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
-          {renderTextWithBold(contentText)}
+          {renderTextWithLinksAndBold(contentText)}
         </li>
       );
     }
@@ -130,7 +200,7 @@ function parseMarkdownToReact(text) {
       flushList(index);
       elements.push(
         <div key={index} style={{ margin: "3px 0", lineHeight: "1.45" }}>
-          {renderTextWithBold(line)}
+          {renderTextWithLinksAndBold(line)}
         </div>
       );
     }

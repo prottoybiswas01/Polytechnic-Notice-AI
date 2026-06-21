@@ -71,6 +71,9 @@ export async function POST(req) {
         if (text) {
           return Response.json({ reply: text });
         }
+        return Response.json({
+          reply: "দুঃখিত, এআই সার্ভিস কোনো উত্তর তৈরি করতে পারেনি। অনুগ্রহ করে আবার চেষ্টা করুন।"
+        });
       } else {
         const errData = await response.json().catch(() => ({}));
         console.error("Gemini API fallback error:", errData);
