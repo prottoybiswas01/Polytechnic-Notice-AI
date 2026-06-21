@@ -127,9 +127,11 @@ export async function POST(req) {
     // Re-evaluate environment keys dynamically at runtime to prevent serverless build-time environment variable caching
     loadApiKeys();
 
-    // 1. Cache & Persistent Storage Lookup (Deflects duplicate queries)
+    // 1. Cache & Persistent Storage Lookup (Deflects duplicate queries, but bypasses for dynamic/live questions)
     const normQuestion = getNormalizedQuestion(messages);
-    if (normQuestion) {
+    const isDynamic = normQuestion && isQueryDynamic(normQuestion);
+
+    if (normQuestion && !isDynamic) {
       // Step A: Check fast In-Memory Cache first
       const cachedEntry = cache.get(normQuestion);
       if (cachedEntry && (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS)) {
@@ -252,8 +254,8 @@ export async function POST(req) {
       }
 
       if (success && replyText) {
-        // Cache the successful response
-        if (normQuestion) {
+        // Cache the successful response (only if the query is NOT dynamic)
+        if (normQuestion && !isDynamic) {
           cache.set(normQuestion, {
             reply: replyText,
             timestamp: Date.now()
@@ -300,8 +302,8 @@ export async function POST(req) {
         const data = await response.json();
         const textBlock = data.content?.find((c) => c.type === "text");
         if (textBlock?.text) {
-          // Save response to in-memory cache and MongoDB
-          if (normQuestion) {
+          // Save response to in-memory cache and MongoDB (only if the query is NOT dynamic)
+          if (normQuestion && !isDynamic) {
             cache.set(normQuestion, {
               reply: textBlock.text,
               timestamp: Date.now()
