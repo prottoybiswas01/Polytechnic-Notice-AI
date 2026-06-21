@@ -34,9 +34,9 @@ const loadApiKeys = () => {
   // Remove empty keys and duplicates
   apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
 
-  // Randomize initial index to load balance requests across all keys in serverless containers
+  // Initialize index to 0 so we always start with the first key (sequential order)
   if (!apiConfig.isInitialized && apiConfig.keys.length > 0) {
-    apiConfig.currentIndex = Math.floor(Math.random() * apiConfig.keys.length);
+    apiConfig.currentIndex = 0;
     apiConfig.isInitialized = true;
   }
 };
@@ -49,21 +49,20 @@ const blockedKeys = new Map();
 const BLOCK_DURATION_MS = 15 * 60 * 1000; // 15 Minutes block duration for exhausted/rate-limited keys
 
 /**
- * Tracks and returns the current active Gemini API key.
- * Rotates to the next key if forceRotate is true, and automatically skips blocked keys.
+ * Tracks and returns the current active Gemini API key using Round-Robin.
+ * Rotates to the next key on each call to distribute the concurrent request load,
+ * and automatically skips any blocked keys.
  */
 function getValidApiKey(forceRotate = false) {
   if (apiConfig.keys.length === 0) return null;
 
   const now = Date.now();
 
-  // Find the next non-blocked key starting from currentIndex
+  // Find the next non-blocked key using Round-Robin (always incrementing on each call)
   let attempts = 0;
   while (attempts < apiConfig.keys.length) {
-    if (forceRotate || attempts > 0) {
-      apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
-      forceRotate = false; // Reset for subsequent steps of loop
-    }
+    // Round-Robin: Rotate to distribute load across keys
+    apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
 
     const candidateKey = apiConfig.keys[apiConfig.currentIndex];
     const blockUntil = blockedKeys.get(candidateKey);
@@ -76,7 +75,7 @@ function getValidApiKey(forceRotate = false) {
       return candidateKey;
     }
 
-    // Key is blocked, force rotation to check next key
+    // Key is blocked, move to next key
     attempts++;
   }
 
@@ -104,11 +103,14 @@ global.cacheCleanupInterval = setInterval(() => {
   }
 }, 10 * 60 * 1000); // runs every 10 minutes
 
-// Helper to normalize user questions
+// Helper to normalize user questions for maximum cache matching
 function getNormalizedQuestion(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role === "user") {
-      return messages[i].content.toLowerCase().trim();
+      let text = messages[i].content.toLowerCase();
+      // Remove common Bengali and English punctuation marks and normalize whitespaces
+      text = text.replace(/[?!\.,।\-\s]+/g, " ");
+      return text.trim();
     }
   }
   return "";
@@ -135,17 +137,15 @@ export async function POST(req) {
         return Response.json({ reply: cachedEntry.reply });
       }
 
-      // Step B: Check MongoDB persistent cache for static queries
-      if (!isQueryDynamic(normQuestion)) {
-        const persistentReply = await findPersistentAnswer(normQuestion);
-        if (persistentReply) {
-          // Warm up in-memory cache for subsequent quick hits
-          cache.set(normQuestion, {
-            reply: persistentReply,
-            timestamp: Date.now()
-          });
-          return Response.json({ reply: persistentReply });
-        }
+      // Step B: Check MongoDB persistent cache
+      const persistentReply = await findPersistentAnswer(normQuestion);
+      if (persistentReply) {
+        // Warm up in-memory cache for subsequent quick hits
+        cache.set(normQuestion, {
+          reply: persistentReply,
+          timestamp: Date.now()
+        });
+        return Response.json({ reply: persistentReply });
       }
     }
 
@@ -259,12 +259,10 @@ export async function POST(req) {
             timestamp: Date.now()
           });
 
-          // Save to persistent database (MongoDB) if question is static
-          if (!isQueryDynamic(normQuestion)) {
-            savePersistentAnswer(normQuestion, replyText).catch((err) => {
-              console.error("[MongoDB Async Save Error]:", err);
-            });
-          }
+          // Save to persistent database (MongoDB)
+          savePersistentAnswer(normQuestion, replyText).catch((err) => {
+            console.error("[MongoDB Async Save Error]:", err);
+          });
         }
         return Response.json({ reply: replyText });
       }
@@ -302,6 +300,16 @@ export async function POST(req) {
         const data = await response.json();
         const textBlock = data.content?.find((c) => c.type === "text");
         if (textBlock?.text) {
+          // Save response to in-memory cache and MongoDB
+          if (normQuestion) {
+            cache.set(normQuestion, {
+              reply: textBlock.text,
+              timestamp: Date.now()
+            });
+            savePersistentAnswer(normQuestion, textBlock.text).catch((err) => {
+              console.error("[MongoDB Async Save Error - Anthropic]:", err);
+            });
+          }
           return Response.json({ reply: textBlock.text });
         }
       } else {
