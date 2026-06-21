@@ -88,7 +88,7 @@ export default function Home() {
           <span className="logo-text" style={styles.logoText}>পলিটেকনিক গাইড <span style={styles.logoBadge}>AI</span></span>
         </div>
         <div style={styles.headerLinks}>
-          <a href="https://facebook.com/groups/আপনার-গ্রুপ-লিংক" target="_blank" rel="noopener noreferrer" style={styles.navLink}>
+          <a href="https://www.facebook.com/groups/1834671093536020" target="_blank" rel="noopener noreferrer" style={styles.navLink}>
             ফেসবুক গ্রুপ
           </a>
         </div>

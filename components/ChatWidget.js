@@ -408,6 +408,20 @@ export default function ChatWidget() {
               ➤
             </button>
           </div>
+
+          {/* Disclaimer */}
+          <div style={styles.disclaimer}>
+            তথ্যটি এআই দ্বারা নিয়ন্ত্রিত হচ্ছে, তাই কিছু তথ্য ভুল হতে পারে। বিস্তারিত জানতে আমাদের{" "}
+            <a
+              href="https://www.facebook.com/groups/1834671093536020"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.disclaimerLink}
+            >
+              গ্রুপে
+            </a>{" "}
+            যুক্ত হতে পারেন।
+          </div>
         </div>
       )}
 
@@ -520,5 +534,18 @@ const styles = {
     fontSize: 15,
     cursor: "pointer",
     flexShrink: 0,
+  },
+  disclaimer: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    textAlign: "center",
+    padding: "0px 14px 10px 14px",
+    background: COLORS.bg,
+    lineHeight: "1.4",
+  },
+  disclaimerLink: {
+    color: COLORS.primary,
+    fontWeight: "600",
+    textDecoration: "underline",
   },
 };
