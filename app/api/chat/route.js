@@ -44,17 +44,47 @@ const loadApiKeys = () => {
 // Initialize the keys array (runs once on compile, and will be re-run inside POST at runtime)
 loadApiKeys();
 
+// Map to track blocked keys: key -> unblockTimestamp
+const blockedKeys = new Map();
+const BLOCK_DURATION_MS = 15 * 60 * 1000; // 15 Minutes block duration for exhausted/rate-limited keys
+
 /**
  * Tracks and returns the current active Gemini API key.
- * Rotates to the next key if forceRotate is true.
+ * Rotates to the next key if forceRotate is true, and automatically skips blocked keys.
  */
 function getValidApiKey(forceRotate = false) {
   if (apiConfig.keys.length === 0) return null;
-  if (forceRotate) {
-    apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
-    console.warn(`[Gemini API Key Rotation] Rotated to key index ${apiConfig.currentIndex}`);
+
+  const now = Date.now();
+
+  // Find the next non-blocked key starting from currentIndex
+  let attempts = 0;
+  while (attempts < apiConfig.keys.length) {
+    if (forceRotate || attempts > 0) {
+      apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
+      forceRotate = false; // Reset for subsequent steps of loop
+    }
+
+    const candidateKey = apiConfig.keys[apiConfig.currentIndex];
+    const blockUntil = blockedKeys.get(candidateKey);
+
+    if (!blockUntil || now > blockUntil) {
+      // If it was blocked but block expired, remove it from blockedKeys
+      if (blockUntil) {
+        blockedKeys.delete(candidateKey);
+      }
+      return candidateKey;
+    }
+
+    // Key is blocked, force rotation to check next key
+    attempts++;
   }
-  return apiConfig.keys[apiConfig.currentIndex];
+
+  // If ALL keys are blocked, fall back to trying the current index anyway (unblocking it)
+  const fallbackKey = apiConfig.keys[apiConfig.currentIndex];
+  blockedKeys.delete(fallbackKey);
+  console.warn(`[Gemini API] All keys are currently blocked. Unblocking index ${apiConfig.currentIndex} as fallback.`);
+  return fallbackKey;
 }
 
 // In-Memory Cache for Duplicate Queries
@@ -172,24 +202,33 @@ export async function POST(req) {
 
       // 3. Multi-Layered Resilient Retry Loop
       for (let attempt = 0; attempt < totalKeys; attempt++) {
-        const currentKey = getValidApiKey();
+        const currentKey = getValidApiKey(attempt > 0);
         if (!currentKey) break;
 
         console.log(`[Gemini API] Attempt ${attempt + 1}/${totalKeys} using key index ${apiConfig.currentIndex}`);
 
         // Step A: Attempt with Google Search enabled
         let response = await makeRequest(currentKey, true);
+        let status = response.status;
 
         // Step B: Fallback (Retry same key WITHOUT search if Step A fails)
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          console.error(`[Gemini API] Search request failed on key index ${apiConfig.currentIndex}:`, errData);
+          console.error(`[Gemini API] Search request failed on key index ${apiConfig.currentIndex} (status ${status}):`, errData);
+
+          // If the key is rate limited (429) or unauthorized/forbidden (401/403), block it and rotate immediately
+          if (status === 429 || status === 401 || status === 403) {
+            blockedKeys.set(currentKey, Date.now() + BLOCK_DURATION_MS);
+            console.warn(`[Gemini API] Key index ${apiConfig.currentIndex} blocked due to status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
+            continue; // Skip retry without search, move to next key
+          }
 
           console.log(`[Gemini API] Retrying same key index ${apiConfig.currentIndex} WITHOUT Google Search...`);
           response = await makeRequest(currentKey, false);
+          status = response.status;
         }
 
-        // Process successful response
+        // Process response
         if (response.ok) {
           const data = await response.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -202,11 +241,14 @@ export async function POST(req) {
           }
         } else {
           const errData = await response.json().catch(() => ({}));
-          console.error(`[Gemini API] Fallback request also failed on key index ${apiConfig.currentIndex}:`, errData);
-        }
+          console.error(`[Gemini API] Fallback request also failed on key index ${apiConfig.currentIndex} (status ${status}):`, errData);
 
-        // Step C: If both steps failed on current key, rotate index and continue loop
-        getValidApiKey(true);
+          // Block key if fallback also failed due to rate limits/auth issues
+          if (status === 429 || status === 401 || status === 403) {
+            blockedKeys.set(currentKey, Date.now() + BLOCK_DURATION_MS);
+            console.warn(`[Gemini API] Key index ${apiConfig.currentIndex} blocked due to fallback status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
+          }
+        }
       }
 
       if (success && replyText) {
