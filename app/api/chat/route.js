@@ -40,6 +40,11 @@ export async function POST(req) {
             generationConfig: {
               maxOutputTokens: 800,
             },
+            tools: [
+              {
+                google_search: {},
+              },
+            ],
           }),
         }
       );
