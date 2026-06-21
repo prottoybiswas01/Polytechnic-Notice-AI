@@ -14,12 +14,12 @@ const apiConfig = {
   isInitialized: false
 };
 
-// Load API Keys: GEMINI_KEY_2 to GEMINI_KEY_22 plus fallbacks dynamically at runtime
+// Load API Keys: GEMINI_KEY_1 to GEMINI_KEY_100 plus fallbacks dynamically at runtime
 const loadApiKeys = () => {
   const loadedKeys = [];
   
-  // Skip GEMINI_KEY_1 as it is verified to be invalid (401 Unauthorized)
-  for (let i = 2; i <= 22; i++) {
+  // Load keys GEMINI_KEY_1 to GEMINI_KEY_100 dynamically
+  for (let i = 1; i <= 100; i++) {
     const key = process.env[`GEMINI_KEY_${i}`];
     if (key) {
       loadedKeys.push(key);
@@ -30,9 +30,6 @@ const loadApiKeys = () => {
   if (process.env.GEMINI_API_KEY) {
     loadedKeys.push(process.env.GEMINI_API_KEY);
   }
-
-  // Hardcoded fallback key
-  loadedKeys.push("AQ.Ab8RN6K3SHM-kHU4RPC_rhoW8OEO5TCxj70Zj0e13xWO1pWUEQ");
 
   // Remove empty keys and duplicates
   apiConfig.keys = Array.from(new Set(loadedKeys.filter(Boolean)));
