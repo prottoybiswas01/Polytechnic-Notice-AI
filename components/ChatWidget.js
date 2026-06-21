@@ -34,26 +34,30 @@ export default function ChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
 
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isOpen, isLoading]);
 
-  async function handleSend() {
-    const trimmed = input.trim();
-    if (!trimmed || isLoading) return;
+  async function sendMessage(textToSend) {
+    const trimmed = textToSend.trim();
+    if (!trimmed || isLoadingRef.current) return;
 
-    const newMessages = [...messages, { role: "user", content: trimmed }];
-    setMessages(newMessages);
-    setInput("");
+    const updatedMessages = [...messagesRef.current, { role: "user", content: trimmed }];
+    setMessages(updatedMessages);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: updatedMessages }),
       });
       const data = await res.json();
 
@@ -76,6 +80,26 @@ export default function ChatWidget() {
       setIsLoading(false);
     }
   }
+
+  async function handleSend() {
+    const trimmed = input.trim();
+    if (!trimmed || isLoading) return;
+    setInput("");
+    await sendMessage(trimmed);
+  }
+
+  useEffect(() => {
+    const handleOpenChat = (e) => {
+      setIsOpen(true);
+      if (e.detail && e.detail.question) {
+        sendMessage(e.detail.question);
+      }
+    };
+    window.addEventListener("open-chat", handleOpenChat);
+    return () => {
+      window.removeEventListener("open-chat", handleOpenChat);
+    };
+  }, []);
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {

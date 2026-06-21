@@ -16,48 +16,81 @@ export async function POST(req) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
 
-    // যদি ANTHROPIC_API_KEY এনভায়রনমেন্ট ভ্যারিয়েবল সেট করা না থাকে, তাহলে ফ্রি এআই ইঞ্জিন ব্যবহার করুন
-    if (!process.env.ANTHROPIC_API_KEY) {
-      const reply = getFreeResponse(messages);
-      return Response.json({ reply });
+    // ১. যদি GEMINI_API_KEY থাকে, তাহলে সেটি ব্যবহার করুন (Google Gemini API - ফ্রি টায়ারে পাওয়া যায়)
+    if (process.env.GEMINI_API_KEY) {
+      const contents = messages.slice(-10).map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            contents: contents,
+            systemInstruction: {
+              parts: [{ text: buildSystemPrompt() }],
+            },
+            generationConfig: {
+              maxOutputTokens: 800,
+            },
+          }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          return Response.json({ reply: text });
+        }
+      } else {
+        const errText = await response.text();
+        console.error("Gemini API error:", errText);
+      }
     }
 
-    // সর্বশেষ ১০টা মেসেজ পাঠাচ্ছি (টোকেন খরচ কম রাখতে)
-    const trimmedHistory = messages.slice(-10).map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    }));
+    // ২. যদি ANTHROPIC_API_KEY থাকে, তাহলে সেটি ব্যবহার করুন (Claude API)
+    if (process.env.ANTHROPIC_API_KEY) {
+      const trimmedHistory = messages.slice(-10).map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      }));
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001", // সাশ্রয়ী মডেল — চ্যাট গাইডলাইনের জন্য যথেষ্ট
-        max_tokens: 800,
-        system: buildSystemPrompt(),
-        messages: trimmedHistory,
-      }),
-    });
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 800,
+          system: buildSystemPrompt(),
+          messages: trimmedHistory,
+        }),
+      });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("Anthropic API error:", errText);
-      
-      // Claude API তে কোনো সমস্যা হলে ফ্রি ইঞ্জিনে ফলব্যাক হবে যাতে সার্ভিস বন্ধ না হয়
-      const reply = getFreeResponse(messages);
-      return Response.json({ reply });
+      if (response.ok) {
+        const data = await response.json();
+        const textBlock = data.content?.find((c) => c.type === "text");
+        if (textBlock?.text) {
+          return Response.json({ reply: textBlock.text });
+        }
+      } else {
+        const errText = await response.text();
+        console.error("Anthropic API error:", errText);
+      }
     }
 
-    const data = await response.json();
-    const textBlock = data.content?.find((c) => c.type === "text");
-
-    return Response.json({
-      reply: textBlock?.text || "দুঃখিত, উত্তর তৈরি করা যায়নি।",
-    });
+    // ৩. কোনো API Key না থাকলে অফলাইন ফ্রি ইঞ্জিনে ফলব্যাক হবে
+    const reply = getFreeResponse(messages);
+    return Response.json({ reply });
   } catch (err) {
     console.error("Chat route error:", err);
     try {

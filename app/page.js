@@ -70,9 +70,7 @@ export default function Home() {
           <div style={styles.ctaGroup}>
             <button 
               onClick={() => {
-                // Trigger opening the chat widget if there was a global state, 
-                // but since it's inside the floating button, we guide them there.
-                alert("চ্যাট শুরু করতে নিচে ডানদিকের চ্যাট বাবল (💬) আইকনে ক্লিক করুন!");
+                window.dispatchEvent(new CustomEvent("open-chat"));
               }} 
               style={styles.primaryBtn}
             >
@@ -110,7 +108,13 @@ export default function Home() {
         
         <div style={styles.grid}>
           {sampleQuestions.map((q, idx) => (
-            <div key={idx} style={styles.card} onClick={() => alert("নিচে ডানদিকের চ্যাট বাটনে ক্লিক করে প্রশ্নটি লিখুন!")}>
+            <div 
+              key={idx} 
+              style={styles.card} 
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("open-chat", { detail: { question: q } }));
+              }}
+            >
               <div style={styles.cardIcon}>❓</div>
               <p style={styles.cardText}>{q}</p>
               <span style={styles.cardAction}>জিজ্ঞেস করুন →</span>
