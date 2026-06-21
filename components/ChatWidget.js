@@ -32,69 +32,18 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
-  const [speakingIndex, setSpeakingIndex] = useState(null);
   const scrollRef = useRef(null);
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const isLoadingRef = useRef(isLoading);
   isLoadingRef.current = isLoading;
-  const isVoiceModeRef = useRef(isVoiceMode);
-  isVoiceModeRef.current = isVoiceMode;
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isOpen, isLoading]);
-
-  // Clean-up synthesis on unmount
-  useEffect(() => {
-    return () => {
-      if (window.recognitionInstance) {
-        window.recognitionInstance.stop();
-      }
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  function speak(text, index) {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      if (speakingIndex === index) {
-        setSpeakingIndex(null);
-        return;
-      }
-      
-      const cleanText = text.replace(/[*#_`\-]/g, "").trim();
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = "bn-BD";
-
-      // Try to find a Bengali voice
-      const voices = window.speechSynthesis.getVoices();
-      const bnVoice = voices.find(v => v.lang.includes("bn") || v.lang.includes("BN"));
-      if (bnVoice) {
-        utterance.voice = bnVoice;
-      }
-
-      utterance.onend = () => setSpeakingIndex(null);
-      utterance.onerror = () => setSpeakingIndex(null);
-
-      setSpeakingIndex(index);
-      window.speechSynthesis.speak(utterance);
-    }
-  }
-
-  function stopSpeaking() {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setSpeakingIndex(null);
-    }
-  }
 
   async function sendMessage(textToSend) {
     const trimmed = textToSend.trim();
@@ -118,10 +67,6 @@ export default function ChatWidget() {
         ...prev,
         { role: "assistant", content: data.reply },
       ]);
-
-      if (isVoiceModeRef.current) {
-        speak(data.reply, updatedMessages.length);
-      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -163,62 +108,8 @@ export default function ChatWidget() {
     }
   }
 
-  function toggleListening() {
-    if (isListening) {
-      if (window.recognitionInstance) {
-        window.recognitionInstance.stop();
-      }
-      setIsListening(false);
-      return;
-    }
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert("দুঃখিত, আপনার ব্রাউজারে ভয়েস টাইপিং সমর্থিত নয়। অনুগ্রহ করে গুগল ক্রোম বা এজ ব্রাউজার ব্যবহার করুন।");
-      return;
-    }
-
-    stopSpeaking();
-    const recognition = new SpeechRecognition();
-    recognition.lang = "bn-BD";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.onresult = async (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript && transcript.trim()) {
-        await sendMessage(transcript);
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error", event.error);
-      setIsListening(false);
-    };
-
-    window.recognitionInstance = recognition;
-    recognition.start();
-  }
-
   return (
     <div style={styles.wrapper}>
-      {/* Pulse Animation Style Injected */}
-      <style>{`
-        @keyframes voicePulse {
-          0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-          70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-          100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-      `}</style>
-
       {isOpen && (
         <div style={styles.panel}>
           {/* Header */}
@@ -229,26 +120,13 @@ export default function ChatWidget() {
                 ডিপ্লোমা ভর্তি সহায়ক · ফ্রি
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <button
-                onClick={() => {
-                  const nextVal = !isVoiceMode;
-                  setIsVoiceMode(nextVal);
-                  if (!nextVal) stopSpeaking();
-                }}
-                style={styles.headerActionBtn}
-                title={isVoiceMode ? "ভয়েস রিডিং বন্ধ করুন" : "ভয়েস রিডিং চালু করুন"}
-              >
-                {isVoiceMode ? "🔊" : "🔇"}
-              </button>
-              <button
-                onClick={() => setIsOpen(false)}
-                style={styles.closeBtn}
-                aria-label="বন্ধ করুন"
-              >
-                ✕
-              </button>
-            </div>
+            <button
+              onClick={() => setIsOpen(false)}
+              style={styles.closeBtn}
+              aria-label="বন্ধ করুন"
+            >
+              ✕
+            </button>
           </div>
 
           {/* Messages */}
@@ -261,18 +139,6 @@ export default function ChatWidget() {
                   justifyContent: m.role === "user" ? "flex-end" : "flex-start",
                 }}
               >
-                {m.role !== "user" && (
-                  <button
-                    onClick={() => speak(m.content, i)}
-                    style={{
-                      ...styles.speakMsgBtn,
-                      color: speakingIndex === i ? COLORS.accent : COLORS.textLight,
-                    }}
-                    title="পড়ে শোনান"
-                  >
-                    {speakingIndex === i ? "🔊" : "🔈"}
-                  </button>
-                )}
                 <div
                   style={{
                     ...styles.bubble,
@@ -298,34 +164,20 @@ export default function ChatWidget() {
 
           {/* Input */}
           <div style={styles.inputRow}>
-            <button
-              onClick={toggleListening}
-              style={{
-                ...styles.micBtn,
-                background: isListening ? "#EF4444" : "transparent",
-                color: isListening ? "#fff" : COLORS.primary,
-                animation: isListening ? "voicePulse 1.5s infinite" : "none",
-                borderColor: isListening ? "#EF4444" : COLORS.border,
-              }}
-              title={isListening ? "শুনছি... বন্ধ করতে ক্লিক করুন" : "ভয়েস দিয়ে প্রশ্ন করুন"}
-            >
-              🎙️
-            </button>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isListening ? "শুনছি, কথা বলুন..." : "আপনার প্রশ্ন লিখুন..."}
+              placeholder="আপনার প্রশ্ন লিখুন..."
               style={styles.textarea}
               rows={1}
-              disabled={isListening}
             />
             <button
               onClick={handleSend}
-              disabled={isLoading || !input.trim() || isListening}
+              disabled={isLoading || !input.trim()}
               style={{
                 ...styles.sendBtn,
-                opacity: isLoading || !input.trim() || isListening ? 0.5 : 1,
+                opacity: isLoading || !input.trim() ? 0.5 : 1,
               }}
               aria-label="পাঠান"
             >
@@ -390,17 +242,6 @@ const styles = {
   },
   headerTitle: { fontWeight: 700, fontSize: 15 },
   headerSubtitle: { fontSize: 12, opacity: 0.85, marginTop: 2 },
-  headerActionBtn: {
-    background: "transparent",
-    border: "none",
-    color: "#fff",
-    fontSize: 16,
-    cursor: "pointer",
-    padding: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
   closeBtn: {
     background: "transparent",
     border: "none",
@@ -417,18 +258,7 @@ const styles = {
     gap: 10,
     background: "#FAFBFB",
   },
-  msgRow: { display: "flex", alignItems: "flex-end" },
-  speakMsgBtn: {
-    background: "transparent",
-    border: "none",
-    fontSize: 14,
-    cursor: "pointer",
-    marginRight: 6,
-    padding: "4px",
-    display: "flex",
-    alignItems: "center",
-    alignSelf: "center",
-  },
+  msgRow: { display: "flex" },
   bubble: {
     maxWidth: "80%",
     padding: "9px 13px",
@@ -443,19 +273,6 @@ const styles = {
     gap: 8,
     padding: 10,
     borderTop: "1px solid #ECECEC",
-  },
-  micBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    border: "1px solid #DDE3E3",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 16,
-    cursor: "pointer",
-    flexShrink: 0,
-    transition: "all 0.2s",
   },
   textarea: {
     flex: 1,
