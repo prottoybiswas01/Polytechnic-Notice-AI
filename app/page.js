@@ -42,11 +42,50 @@ export default function Home() {
 
   return (
     <main style={styles.container}>
+      <style>{`
+        @media (max-width: 768px) {
+          .header-container {
+            padding: 15px 16px !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            text-align: center !important;
+          }
+          .logo-text {
+            font-size: 18px !important;
+          }
+          .hero-section {
+            grid-template-columns: 1fr !important;
+            gap: 30px !important;
+            padding: 40px 16px !important;
+            text-align: center !important;
+          }
+          .hero-content {
+            align-items: center !important;
+          }
+          .hero-title {
+            font-size: 28px !important;
+            line-height: 1.3 !important;
+          }
+          .hero-subtitle {
+            font-size: 15px !important;
+            margin-bottom: 24px !important;
+          }
+          .cta-group {
+            justify-content: center !important;
+            width: 100% !important;
+          }
+          .hero-visual {
+            width: 100% !important;
+            margin-top: 10px !important;
+          }
+        }
+      `}</style>
+
       {/* Header / Navbar */}
-      <header style={styles.header}>
+      <header className="header-container" style={styles.header}>
         <div style={styles.logo}>
           <span style={styles.logoIcon}>🎓</span>
-          <span style={styles.logoText}>পলিটেকনিক গাইড <span style={styles.logoBadge}>AI</span></span>
+          <span className="logo-text" style={styles.logoText}>পলিটেকনিক গাইড <span style={styles.logoBadge}>AI</span></span>
         </div>
         <div style={styles.headerLinks}>
           <a href="https://facebook.com/groups/আপনার-গ্রুপ-লিংক" target="_blank" rel="noopener noreferrer" style={styles.navLink}>
@@ -56,18 +95,18 @@ export default function Home() {
       </header>
 
       {/* Hero Section */}
-      <section style={styles.hero}>
-        <div style={styles.heroContent}>
+      <section className="hero-section" style={styles.hero}>
+        <div className="hero-content" style={styles.heroContent}>
           <span style={styles.badge}>ভর্তি সহায়িকা ২০২৬</span>
-          <h1 style={styles.heroTitle}>
+          <h1 className="hero-title" style={styles.heroTitle}>
             পলিটেকনিক ভর্তি নিয়ে যেকোনো দ্বিধা? <br />
             <span style={styles.highlight}>সমাধান দেবে কৃত্রিম বুদ্ধিমত্তা!</span>
           </h1>
-          <p style={styles.heroSubtitle}>
+          <p className="hero-subtitle" style={styles.heroSubtitle}>
             আমাদের এআই অ্যাসিস্ট্যান্টের সাথে সরাসরি চ্যাট করে জেনে নিন আবেদনের নিয়ম, প্রয়োজনীয় কাগজপত্র এবং চয়েস লিস্ট সাজানোর সেরা ট্রিকস।
           </p>
 
-          <div style={styles.ctaGroup}>
+          <div className="cta-group" style={styles.ctaGroup}>
             <button 
               onClick={() => {
                 window.dispatchEvent(new CustomEvent("open-chat"));
@@ -82,7 +121,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div style={styles.heroVisual}>
+        <div className="hero-visual" style={styles.heroVisual}>
           <div style={styles.sparkleCard}>
             <div style={styles.sparkleHeader}>
               <div style={styles.sparkleDot}></div>

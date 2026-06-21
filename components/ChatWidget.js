@@ -27,6 +27,119 @@ const WELCOME_MESSAGE = {
     "আসসালামু আলাইকুম! আমি পলিটেকনিক গাইড 🎓\nডিপ্লোমা/পলিটেকনিক ভর্তি নিয়ে যেকোনো প্রশ্ন করতে পারেন — আমি ধাপে ধাপে বুঝিয়ে দেব।",
 };
 
+function parseMarkdownToReact(text) {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+  const elements = [];
+  let currentList = null; // 'ul' or 'ol'
+  let listItems = [];
+
+  const renderTextWithBold = (txt) => {
+    // Split by markdown bold format: **text**
+    const parts = txt.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  const flushList = (key) => {
+    if (currentList && listItems.length > 0) {
+      const listStyle = currentList === "ul" 
+        ? { margin: "4px 0", paddingLeft: "18px", listStyleType: "disc" }
+        : { margin: "4px 0", paddingLeft: "18px", listStyleType: "decimal" };
+        
+      elements.push(
+        currentList === "ul" ? (
+          <ul key={`list-${key}`} style={listStyle}>
+            {listItems}
+          </ul>
+        ) : (
+          <ol key={`list-${key}`} style={listStyle}>
+            {listItems}
+          </ol>
+        )
+      );
+      listItems = [];
+      currentList = null;
+    }
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+
+    // Headings
+    if (trimmed.startsWith("### ")) {
+      flushList(index);
+      elements.push(
+        <h4 key={index} style={{ margin: "8px 0 4px 0", fontWeight: "700", fontSize: "14px", color: COLORS.primaryDark }}>
+          {renderTextWithBold(trimmed.slice(4))}
+        </h4>
+      );
+    } else if (trimmed.startsWith("## ")) {
+      flushList(index);
+      elements.push(
+        <h3 key={index} style={{ margin: "10px 0 5px 0", fontWeight: "700", fontSize: "15px", color: COLORS.primaryDark }}>
+          {renderTextWithBold(trimmed.slice(3))}
+        </h3>
+      );
+    } else if (trimmed.startsWith("# ")) {
+      flushList(index);
+      elements.push(
+        <h2 key={index} style={{ margin: "12px 0 6px 0", fontWeight: "700", fontSize: "16px", color: COLORS.primaryDark }}>
+          {renderTextWithBold(trimmed.slice(2))}
+        </h2>
+      );
+    }
+    // Unordered lists
+    else if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+      if (currentList !== "ul") {
+        flushList(index);
+        currentList = "ul";
+      }
+      listItems.push(
+        <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
+          {renderTextWithBold(trimmed.slice(2))}
+        </li>
+      );
+    }
+    // Numbered lists (support both Bengali and English digits)
+    else if (/^\d+\.\s/.test(trimmed) || /^[১২৩৪৫৬৭৮৯০]+\.\s/.test(trimmed)) {
+      if (currentList !== "ol") {
+        flushList(index);
+        currentList = "ol";
+      }
+      const match = trimmed.match(/^([^\s]+)\s(.*)/);
+      const contentText = match ? match[2] : trimmed;
+      listItems.push(
+        <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
+          {renderTextWithBold(contentText)}
+        </li>
+      );
+    }
+    // Empty line
+    else if (trimmed === "") {
+      flushList(index);
+      elements.push(<div key={index} style={{ height: "6px" }} />);
+    }
+    // Normal text line
+    else {
+      flushList(index);
+      elements.push(
+        <div key={index} style={{ margin: "3px 0", lineHeight: "1.45" }}>
+          {renderTextWithBold(line)}
+        </div>
+      );
+    }
+  });
+
+  flushList(lines.length);
+  return elements;
+}
+
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
@@ -109,9 +222,41 @@ export default function ChatWidget() {
   }
 
   return (
-    <div style={styles.wrapper}>
+    <div className={isOpen ? "chat-wrapper-open" : "chat-wrapper"} style={styles.wrapper}>
+      <style>{`
+        @media (max-width: 600px) {
+          .chat-wrapper-open {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            z-index: 99999 !important;
+            margin: 0 !important;
+          }
+          .chat-panel {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: 100vw !important;
+            max-height: 100vh !important;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            z-index: 99999 !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+          .chat-fab-hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
       {isOpen && (
-        <div style={styles.panel}>
+        <div className="chat-panel" style={styles.panel}>
           {/* Header */}
           <div style={styles.header}>
             <div>
@@ -147,9 +292,10 @@ export default function ChatWidget() {
                     color: m.role === "user" ? "#fff" : COLORS.text,
                     borderBottomRightRadius: m.role === "user" ? 4 : 16,
                     borderBottomLeftRadius: m.role === "user" ? 16 : 4,
+                    whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
                   }}
                 >
-                  {m.content}
+                  {m.role === "user" ? m.content : parseMarkdownToReact(m.content)}
                 </div>
               </div>
             ))}
@@ -190,6 +336,7 @@ export default function ChatWidget() {
       {/* Floating bubble button */}
       <button
         onClick={() => setIsOpen((v) => !v)}
+        className={isOpen ? "chat-fab-hidden" : "chat-fab"}
         style={styles.fab}
         aria-label="চ্যাট খুলুন"
       >
