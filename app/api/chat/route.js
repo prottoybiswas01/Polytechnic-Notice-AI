@@ -5,6 +5,7 @@
 // প্রজেক্টের উচ্চ ট্রাফিক সামলানোর জন্য এতে ক্যাশিং, কী-রোটেশন এবং ফেলাইওভার মেকানিজম যুক্ত করা হয়েছে।
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
+import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer } from "../../../lib/qaStore";
 
 // Configuration for Gemini API key rotation
 const apiConfig = {
@@ -87,13 +88,27 @@ export async function POST(req) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
 
-    // 1. In-Memory Cache Lookup (Deflects concurrent duplicate queries)
+    // 1. Cache & Persistent Storage Lookup (Deflects duplicate queries)
     const normQuestion = getNormalizedQuestion(messages);
     if (normQuestion) {
+      // Step A: Check fast In-Memory Cache first
       const cachedEntry = cache.get(normQuestion);
       if (cachedEntry && (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS)) {
-        console.log(`[Cache Hit] Serving cached response for: "${normQuestion}"`);
+        console.log(`[In-Memory Cache Hit] Serving response for: "${normQuestion}"`);
         return Response.json({ reply: cachedEntry.reply });
+      }
+
+      // Step B: Check MongoDB persistent cache for static queries
+      if (!isQueryDynamic(normQuestion)) {
+        const persistentReply = await findPersistentAnswer(normQuestion);
+        if (persistentReply) {
+          // Warm up in-memory cache for subsequent quick hits
+          cache.set(normQuestion, {
+            reply: persistentReply,
+            timestamp: Date.now()
+          });
+          return Response.json({ reply: persistentReply });
+        }
       }
     }
 
@@ -194,6 +209,13 @@ export async function POST(req) {
             reply: replyText,
             timestamp: Date.now()
           });
+
+          // Save to persistent database (MongoDB) if question is static
+          if (!isQueryDynamic(normQuestion)) {
+            savePersistentAnswer(normQuestion, replyText).catch((err) => {
+              console.error("[MongoDB Async Save Error]:", err);
+            });
+          }
         }
         return Response.json({ reply: replyText });
       }
