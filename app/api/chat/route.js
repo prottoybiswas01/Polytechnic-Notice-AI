@@ -22,30 +22,48 @@ export async function POST(req) {
         parts: [{ text: m.content }],
       }));
 
-      const response = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": geminiKey,
+      const makeRequest = async (useSearch) => {
+        const bodyObj = {
+          contents: contents,
+          systemInstruction: {
+            parts: [{ text: buildSystemPrompt() }],
           },
-          body: JSON.stringify({
-            contents: contents,
-            systemInstruction: {
-              parts: [{ text: buildSystemPrompt() }],
+          generationConfig: {
+            maxOutputTokens: 800,
+          },
+        };
+
+        if (useSearch) {
+          bodyObj.tools = [
+            {
+              google_search: {},
             },
-            generationConfig: {
-              maxOutputTokens: 800,
-            },
-            tools: [
-              {
-                google_search: {},
-              },
-            ],
-          }),
+          ];
         }
-      );
+
+        return fetch(
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": geminiKey,
+            },
+            body: JSON.stringify(bodyObj),
+          }
+        );
+      };
+
+      let response = await makeRequest(true);
+
+      // যদি প্রথমবার ফেইল করে (যেমন গুগল সার্চ টুলের লিমিট/কোটার কারণে), তাহলে সার্চ ছাড়া আবার চেষ্টা করুন
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error("Gemini API error (with search):", errData);
+        
+        console.log("Retrying Gemini API request without Google Search...");
+        response = await makeRequest(false);
+      }
 
       if (response.ok) {
         const data = await response.json();
@@ -55,7 +73,7 @@ export async function POST(req) {
         }
       } else {
         const errData = await response.json().catch(() => ({}));
-        console.error("Gemini API error:", errData);
+        console.error("Gemini API fallback error:", errData);
         if (response.status === 429 || errData.error?.status === "RESOURCE_EXHAUSTED") {
           return Response.json({
             reply: "দুঃখিত, এআই সার্ভিসের ফ্রি কোটা সাময়িকভাবে শেষ হয়ে গেছে। অনুগ্রহ করে ১ মিনিট পর আবার চেষ্টা করুন।"
