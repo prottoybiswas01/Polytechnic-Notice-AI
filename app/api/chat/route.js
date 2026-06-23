@@ -6,6 +6,7 @@
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
 import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer } from "../../../lib/qaStore";
+import { recordMessage, blockApiKey, unblockApiKey, getBlockedKeys } from "../../../lib/apiTracker";
 
 // Configuration for Gemini API key rotation
 const apiConfig = {
@@ -14,21 +15,30 @@ const apiConfig = {
   isInitialized: false
 };
 
+const keyMap = new Map(); // keyString -> keyName
+
 // Load API Keys: GEMINI_KEY_1 to GEMINI_KEY_100 plus fallbacks dynamically at runtime
 const loadApiKeys = () => {
   const loadedKeys = [];
+  keyMap.clear();
   
   // Load keys GEMINI_KEY_1 to GEMINI_KEY_100 dynamically
   for (let i = 1; i <= 100; i++) {
-    const key = process.env[`GEMINI_KEY_${i}`];
+    const keyName = `GEMINI_KEY_${i}`;
+    const key = process.env[keyName];
     if (key) {
       loadedKeys.push(key);
+      keyMap.set(key, keyName);
     }
   }
 
   // Fallback to GEMINI_API_KEY
-  if (process.env.GEMINI_API_KEY) {
-    loadedKeys.push(process.env.GEMINI_API_KEY);
+  const fallback = process.env.GEMINI_API_KEY;
+  if (fallback) {
+    loadedKeys.push(fallback);
+    if (!keyMap.has(fallback)) {
+      keyMap.set(fallback, "GEMINI_API_KEY");
+    }
   }
 
   // Remove empty keys and duplicates
@@ -44,7 +54,7 @@ const loadApiKeys = () => {
 // Initialize the keys array (runs once on compile, and will be re-run inside POST at runtime)
 loadApiKeys();
 
-// Map to track blocked keys: key -> unblockTimestamp
+// Map to track blocked keys: keyName -> unblockTimestamp
 const blockedKeys = new Map();
 const BLOCK_DURATION_MS = 15 * 60 * 1000; // 15 Minutes block duration for exhausted/rate-limited keys
 
@@ -65,12 +75,14 @@ function getValidApiKey(forceRotate = false) {
     apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
 
     const candidateKey = apiConfig.keys[apiConfig.currentIndex];
-    const blockUntil = blockedKeys.get(candidateKey);
+    const candidateName = keyMap.get(candidateKey) || "UNKNOWN_KEY";
+    const blockUntil = blockedKeys.get(candidateName);
 
     if (!blockUntil || now > blockUntil) {
-      // If it was blocked but block expired, remove it from blockedKeys
+      // If it was blocked but block expired, remove it from blockedKeys and DB
       if (blockUntil) {
-        blockedKeys.delete(candidateKey);
+        blockedKeys.delete(candidateName);
+        unblockApiKey(candidateName).catch(err => console.error("DB unblock error:", err));
       }
       return candidateKey;
     }
@@ -81,8 +93,10 @@ function getValidApiKey(forceRotate = false) {
 
   // If ALL keys are blocked, fall back to trying the current index anyway (unblocking it)
   const fallbackKey = apiConfig.keys[apiConfig.currentIndex];
-  blockedKeys.delete(fallbackKey);
-  console.warn(`[Gemini API] All keys are currently blocked. Unblocking index ${apiConfig.currentIndex} as fallback.`);
+  const fallbackName = keyMap.get(fallbackKey) || "UNKNOWN_KEY";
+  blockedKeys.delete(fallbackName);
+  unblockApiKey(fallbackName).catch(err => console.error("DB unblock error:", err));
+  console.warn(`[Gemini API] All keys are currently blocked. Unblocking ${fallbackName} as fallback.`);
   return fallbackKey;
 }
 
@@ -124,8 +138,22 @@ export async function POST(req) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
     }
 
+    // Record message count in DB (async, do not block response)
+    recordMessage().catch((err) => console.error("[Tracker Error]:", err));
+
     // Re-evaluate environment keys dynamically at runtime to prevent serverless build-time environment variable caching
     loadApiKeys();
+
+    // Sync blocked keys from DB to memory
+    try {
+      const dbBlocked = await getBlockedKeys();
+      blockedKeys.clear();
+      for (const doc of dbBlocked) {
+        blockedKeys.set(doc.keyName, doc.blockedUntil.getTime());
+      }
+    } catch (err) {
+      console.error("[Tracker Sync Error]:", err);
+    }
 
     // 1. Cache & Persistent Storage Lookup (Deflects duplicate queries, but bypasses for dynamic/live questions)
     const normQuestion = getNormalizedQuestion(messages);
@@ -220,8 +248,10 @@ export async function POST(req) {
 
           // If the key is rate limited (429) or unauthorized/forbidden (401/403), block it and rotate immediately
           if (status === 429 || status === 401 || status === 403) {
-            blockedKeys.set(currentKey, Date.now() + BLOCK_DURATION_MS);
-            console.warn(`[Gemini API] Key index ${apiConfig.currentIndex} blocked due to status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
+            const keyName = keyMap.get(currentKey) || "UNKNOWN_KEY";
+            blockedKeys.set(keyName, Date.now() + BLOCK_DURATION_MS);
+            blockApiKey(keyName, BLOCK_DURATION_MS).catch(err => console.error("DB block error:", err));
+            console.warn(`[Gemini API] Key ${keyName} blocked due to status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
             continue; // Skip retry without search, move to next key
           }
 
@@ -247,8 +277,10 @@ export async function POST(req) {
 
           // Block key if fallback also failed due to rate limits/auth issues
           if (status === 429 || status === 401 || status === 403) {
-            blockedKeys.set(currentKey, Date.now() + BLOCK_DURATION_MS);
-            console.warn(`[Gemini API] Key index ${apiConfig.currentIndex} blocked due to fallback status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
+            const keyName = keyMap.get(currentKey) || "UNKNOWN_KEY";
+            blockedKeys.set(keyName, Date.now() + BLOCK_DURATION_MS);
+            blockApiKey(keyName, BLOCK_DURATION_MS).catch(err => console.error("DB block error:", err));
+            console.warn(`[Gemini API] Key ${keyName} blocked due to fallback status ${status} for ${BLOCK_DURATION_MS / 1000}s`);
           }
         }
       }

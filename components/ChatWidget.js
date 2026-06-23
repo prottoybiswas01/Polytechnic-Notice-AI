@@ -228,6 +228,16 @@ export default function ChatWidget() {
     }
   }, [messages, isOpen, isLoading]);
 
+  const getOrCreateVisitorId = () => {
+    if (typeof window === "undefined") return "";
+    let id = localStorage.getItem("visitor_id");
+    if (!id) {
+      id = "visitor_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      localStorage.setItem("visitor_id", id);
+    }
+    return id;
+  };
+
   async function sendMessage(textToSend) {
     const trimmed = textToSend.trim();
     if (!trimmed || isLoadingRef.current) return;
@@ -237,10 +247,11 @@ export default function ChatWidget() {
     setIsLoading(true);
 
     try {
+      const visitorId = getOrCreateVisitorId();
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages }),
+        body: JSON.stringify({ messages: updatedMessages, visitorId }),
       });
       const data = await res.json();
 

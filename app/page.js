@@ -1,7 +1,7 @@
 // app/page.js
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const COLORS = {
   primaryDark: "#0F4C5C",
@@ -17,6 +17,33 @@ const COLORS = {
 
 export default function Home() {
   const [activeFaq, setActiveFaq] = useState(null);
+
+  useEffect(() => {
+    const getOrCreateVisitorId = () => {
+      if (typeof window === "undefined") return "";
+      let id = localStorage.getItem("visitor_id");
+      if (!id) {
+        id = "visitor_" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem("visitor_id", id);
+      }
+      return id;
+    };
+    
+    const trackVisit = async () => {
+      const visitorId = getOrCreateVisitorId();
+      if (!visitorId) return;
+      try {
+        await fetch("/api/analytics/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitorId }),
+        });
+      } catch (err) {
+        console.error("Failed to track visit:", err);
+      }
+    };
+    trackVisit();
+  }, []);
 
   const sampleQuestions = [
     "পলিটেকনিকে ভর্তির জন্য ন্যূনতম কী যোগ্যতা লাগে?",
