@@ -228,6 +228,39 @@ export default function ChatWidget() {
     }
   }, [messages, isOpen, isLoading]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isMobile = window.innerWidth <= 600;
+      if (isOpen && isMobile) {
+        // Record scroll position and lock body scroll to prevent background scrolling
+        const scrollY = window.scrollY;
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${scrollY}px`;
+        document.body.style.width = "100%";
+        document.body.style.overflow = "hidden";
+        document.body.dataset.scrollY = scrollY.toString();
+      } else {
+        // Restore background scrolling and previous scroll position
+        const scrollY = parseInt(document.body.dataset.scrollY || "0", 10);
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        if (scrollY > 0) {
+          window.scrollTo(0, scrollY);
+        }
+      }
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+      }
+    };
+  }, [isOpen]);
+
   const getOrCreateVisitorId = () => {
     if (typeof window === "undefined") return "";
     let id = localStorage.getItem("visitor_id");
@@ -313,11 +346,9 @@ export default function ChatWidget() {
             bottom: 0 !important;
             right: 0 !important;
             width: 100vw !important;
-            height: 100% !important;
-            height: 100dvh !important;
+            height: auto !important;
             max-width: 100vw !important;
             max-height: 100% !important;
-            max-height: 100dvh !important;
             z-index: 99999 !important;
             margin: 0 !important;
           }
@@ -328,11 +359,9 @@ export default function ChatWidget() {
             bottom: 0 !important;
             right: 0 !important;
             width: 100vw !important;
-            height: 100% !important;
-            height: 100dvh !important;
+            height: auto !important;
             max-width: 100vw !important;
             max-height: 100% !important;
-            max-height: 100dvh !important;
             border-radius: 0 !important;
             margin: 0 !important;
             z-index: 99999 !important;

@@ -6,6 +6,13 @@ export const metadata = {
   description: "পলিটেকনিক ও কারিগরি শিক্ষা ভর্তি বিষয়ক সকল তথ্যের সমাধান ও এআই চ্যাটবট সহায়ক।",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="bn">
