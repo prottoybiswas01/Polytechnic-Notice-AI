@@ -7,6 +7,7 @@
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
 import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer } from "../../../lib/qaStore";
 import { recordMessage, blockApiKey, unblockApiKey, getBlockedKeys } from "../../../lib/apiTracker";
+import { callCloudflareAI } from "../../../lib/cloudflareAI";
 
 // Configuration for Gemini API key rotation
 const apiConfig = {
@@ -182,10 +183,33 @@ export async function POST(req) {
     // 2. Token & History Optimization: Slice to include ONLY the last 4 messages.
     // Extremely critical to prevent TPM throttling under high traffic.
     const truncatedHistory = messages.slice(-4);
+    const systemPrompt = buildSystemPrompt();
 
+    // 3. Primary AI Engine: Cloudflare Workers AI (Free daily quota/tokens)
+    try {
+      const cfResult = await callCloudflareAI(truncatedHistory, systemPrompt);
+      if (cfResult.success && cfResult.reply) {
+        console.log("[Cloudflare Workers AI] Successfully answered chat query.");
+        if (normQuestion && !isDynamic) {
+          cache.set(normQuestion, {
+            reply: cfResult.reply,
+            timestamp: Date.now()
+          });
+          savePersistentAnswer(normQuestion, cfResult.reply).catch((err) => {
+            console.error("[MongoDB Async Save Error - Cloudflare AI]:", err);
+          });
+        }
+        return Response.json({ reply: cfResult.reply });
+      } else {
+        console.warn("[Cloudflare Workers AI] Request failed or quota limit reached. Falling back to Gemini API keys...");
+      }
+    } catch (cfErr) {
+      console.error("[Cloudflare Workers AI Error]:", cfErr);
+      console.warn("[Cloudflare Workers AI] Exception encountered. Falling back to Gemini API keys...");
+    }
+
+    // 4. Secondary AI Engine (Fallback): Gemini API Key Rotation Loop across all active keys
     if (apiConfig.keys.length > 0) {
-      const systemPrompt = buildSystemPrompt();
-
       // Function to trigger generateContent request
       const makeRequest = async (apiKey, useSearch) => {
         const contents = truncatedHistory.map((m) => ({
@@ -214,7 +238,7 @@ export async function POST(req) {
         }
 
         return fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+          "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
           {
             method: "POST",
             headers: {
@@ -301,11 +325,7 @@ export async function POST(req) {
         return Response.json({ reply: replyText });
       }
 
-      console.error("[Gemini API] All API keys failed or were exhausted.");
-      return Response.json(
-        { error: "Service temporarily unavailable" },
-        { status: 503 }
-      );
+      console.warn("[Gemini API] All API keys failed or were exhausted.");
     }
 
     // Fallback block for Anthropic API
