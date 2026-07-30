@@ -69,18 +69,16 @@ function getValidApiKey(forceRotate = false) {
 
   const now = Date.now();
 
-  // Find the next non-blocked key using Round-Robin (always incrementing on each call)
   let attempts = 0;
   while (attempts < apiConfig.keys.length) {
-    // Round-Robin: Rotate to distribute load across keys
-    apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
-
+    if (forceRotate && attempts === 0) {
+      apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
+    }
     const candidateKey = apiConfig.keys[apiConfig.currentIndex];
     const candidateName = keyMap.get(candidateKey) || "UNKNOWN_KEY";
     const blockUntil = blockedKeys.get(candidateName);
 
     if (!blockUntil || now > blockUntil) {
-      // If it was blocked but block expired, remove it from blockedKeys and DB
       if (blockUntil) {
         blockedKeys.delete(candidateName);
         unblockApiKey(candidateName).catch(err => console.error("DB unblock error:", err));
@@ -89,6 +87,7 @@ function getValidApiKey(forceRotate = false) {
     }
 
     // Key is blocked, move to next key
+    apiConfig.currentIndex = (apiConfig.currentIndex + 1) % apiConfig.keys.length;
     attempts++;
   }
 
@@ -133,7 +132,7 @@ function getNormalizedQuestion(messages) {
 
 export async function POST(req) {
   try {
-    const { messages } = await req.json();
+    const { messages, language } = await req.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return Response.json({ error: "messages আবশ্যক" }, { status: 400 });
@@ -183,7 +182,7 @@ export async function POST(req) {
     // 2. Token & History Optimization: Slice to include ONLY the last 4 messages.
     // Extremely critical to prevent TPM throttling under high traffic.
     const truncatedHistory = messages.slice(-4);
-    const systemPrompt = buildSystemPrompt();
+    const systemPrompt = buildSystemPrompt(language || "bn");
 
     // 3. Primary AI Engine: Cloudflare Workers AI (Free daily quota/tokens)
     try {
@@ -223,7 +222,7 @@ export async function POST(req) {
             parts: [{ text: systemPrompt }],
           },
           generationConfig: {
-            maxOutputTokens: 800,
+            maxOutputTokens: 2500,
             temperature: 0.4,
             topP: 0.95,
           },

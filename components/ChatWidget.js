@@ -215,12 +215,15 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [language, setLanguage] = useState("bn");
   const scrollRef = useRef(null);
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
   const isLoadingRef = useRef(isLoading);
   isLoadingRef.current = isLoading;
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -284,7 +287,7 @@ export default function ChatWidget() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages, visitorId }),
+        body: JSON.stringify({ messages: updatedMessages, visitorId, language: languageRef.current }),
       });
       const data = await res.json();
 
@@ -383,6 +386,41 @@ export default function ChatWidget() {
                 ডিপ্লোমা ভর্তি সহায়ক · ফ্রি
               </div>
             </div>
+
+            {/* Language Switcher Pills */}
+            <div style={styles.langContainer}>
+              <button
+                onClick={() => setLanguage("bn")}
+                style={{
+                  ...styles.langPill,
+                  background: language === "bn" ? COLORS.accent : "rgba(255,255,255,0.15)",
+                  fontWeight: language === "bn" ? "700" : "500",
+                }}
+              >
+                বাংলা
+              </button>
+              <button
+                onClick={() => setLanguage("en")}
+                style={{
+                  ...styles.langPill,
+                  background: language === "en" ? COLORS.accent : "rgba(255,255,255,0.15)",
+                  fontWeight: language === "en" ? "700" : "500",
+                }}
+              >
+                English
+              </button>
+              <button
+                onClick={() => setLanguage("banglish")}
+                style={{
+                  ...styles.langPill,
+                  background: language === "banglish" ? COLORS.accent : "rgba(255,255,255,0.15)",
+                  fontWeight: language === "banglish" ? "700" : "500",
+                }}
+              >
+                Banglish
+              </button>
+            </div>
+
             <button
               onClick={() => setIsOpen(false)}
               style={styles.closeBtn}
@@ -587,5 +625,21 @@ const styles = {
     color: COLORS.primary,
     fontWeight: "600",
     textDecoration: "underline",
+  },
+  langContainer: {
+    display: "flex",
+    gap: 3,
+    background: "rgba(0, 0, 0, 0.25)",
+    padding: "3px",
+    borderRadius: 20,
+  },
+  langPill: {
+    border: "none",
+    color: "#fff",
+    fontSize: 10.5,
+    padding: "3px 7px",
+    borderRadius: 14,
+    cursor: "pointer",
+    transition: "all 0.2s ease",
   },
 };
