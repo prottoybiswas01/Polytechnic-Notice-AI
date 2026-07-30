@@ -5,7 +5,7 @@
 // প্রজেক্টের উচ্চ ট্রাফিক সামলানোর জন্য এতে ক্যাশিং, কী-রোটেশন এবং ফেলাইওভার মেকানিজম যুক্ত করা হয়েছে।
 
 import { buildSystemPrompt } from "../../../lib/systemPrompt";
-import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer } from "../../../lib/qaStore";
+import { isQueryDynamic, findPersistentAnswer, savePersistentAnswer, isAnswerComplete } from "../../../lib/qaStore";
 import { recordMessage, blockApiKey, unblockApiKey, getBlockedKeys } from "../../../lib/apiTracker";
 import { callCloudflareAI } from "../../../lib/cloudflareAI";
 
@@ -162,7 +162,7 @@ export async function POST(req) {
     if (normQuestion && !isDynamic) {
       // Step A: Check fast In-Memory Cache first
       const cachedEntry = cache.get(normQuestion);
-      if (cachedEntry && (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS)) {
+      if (cachedEntry && (Date.now() - cachedEntry.timestamp < CACHE_TTL_MS) && isAnswerComplete(cachedEntry.reply)) {
         console.log(`[In-Memory Cache Hit] Serving response for: "${normQuestion}"`);
         return Response.json({ reply: cachedEntry.reply });
       }
