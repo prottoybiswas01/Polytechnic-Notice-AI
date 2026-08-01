@@ -2,8 +2,8 @@
 
 // components/ChatWidget.js
 //
-// ডিপ্লোমা ভর্তি সহায়িকার উচ্চ-মানের চ্যাট উইজেট।
-// সম্পূর্ণ বাংলায় ইউজার-ফ্রেন্ডলি চ্যাট অভিজ্ঞতা, কুইক সাজেশন চিপস এবং সুন্দর ভিজ্যুয়াল কমফোর্ট।
+// ডিপ্লোমা ভর্তি সহায়িকার চ্যাট উইজেট।
+// সম্পূর্ণ বাংলায় ইউজার-ফ্রেন্ডলি চ্যাট অভিজ্ঞতা ও সুন্দর ভিজ্যুয়াল কমফোর্ট।
 
 import { useState, useRef, useEffect } from "react";
 
@@ -21,13 +21,6 @@ const COLORS = {
   textLight: "#64748B",
   border: "#E2E8F0",
 };
-
-const QUICK_PROMPTS = [
-  "🏫 ঢাকা পলিটেকনিকের সিট কত?",
-  "📋 আবেদনের জিপিএ যোগ্যতা কী?",
-  "🎯 চয়েস লিস্ট কীভাবে সাজাব?",
-  "🎁 মহিলা ও ভোকেশনাল কোটা নিয়ম"
-];
 
 function parseMarkdownToReact(text) {
   if (!text) return null;
@@ -346,25 +339,6 @@ export default function ChatWidget() {
         .dot2 { animation: pulseDot 1.4s infinite 0.2s; }
         .dot3 { animation: pulseDot 1.4s infinite 0.4s; }
 
-        .chip-btn {
-          background: #FFFFFF;
-          border: 1px solid #CBD5E1;
-          color: #0F4C5C;
-          padding: 6px 12px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 500;
-          cursor: pointer;
-          white-space: nowrap;
-          transition: all 0.2s ease;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-        .chip-btn:hover {
-          background: #13687D;
-          color: #FFFFFF;
-          border-color: #13687D;
-        }
-
         @media (max-width: 600px) {
           .chat-wrapper-open {
             position: fixed !important;
@@ -422,19 +396,6 @@ export default function ChatWidget() {
             >
               ✕
             </button>
-          </div>
-
-          {/* Quick Chips Bar (shown at top of messages) */}
-          <div style={styles.chipsContainer}>
-            {QUICK_PROMPTS.map((promptText, idx) => (
-              <button
-                key={idx}
-                className="chip-btn"
-                onClick={() => sendMessage(promptText.replace(/^[^\s]+\s/, ""))}
-              >
-                {promptText}
-              </button>
-            ))}
           </div>
 
           {/* Messages Container */}
@@ -615,15 +576,6 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-  },
-  chipsContainer: {
-    display: "flex",
-    gap: 8,
-    padding: "10px 14px",
-    background: COLORS.primaryLight,
-    borderBottom: `1px solid ${COLORS.border}`,
-    overflowX: "auto",
-    scrollbarWidth: "none",
   },
   messages: {
     flex: 1,
