@@ -182,7 +182,7 @@ export async function POST(req) {
     // 2. Token & History Optimization: Slice to include ONLY the last 4 messages.
     // Extremely critical to prevent TPM throttling under high traffic.
     const truncatedHistory = messages.slice(-4);
-    const systemPrompt = buildSystemPrompt(language || "bn");
+    const systemPrompt = buildSystemPrompt();
 
     // 3. Primary AI Engine: Cloudflare Workers AI (Free daily quota/tokens)
     try {

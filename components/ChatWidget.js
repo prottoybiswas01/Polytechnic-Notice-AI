@@ -2,49 +2,32 @@
 
 // components/ChatWidget.js
 //
-// এই কম্পোনেন্টটা যেকোনো পেজে বসিয়ে দিলেই নিচে-ডানদিকে একটা চ্যাট বাবল দেখাবে।
-// ব্যবহার: app/layout.js -এ <ChatWidget /> যোগ করুন, পুরো সাইটে দেখা যাবে।
-//
-// নোট: এই কম্পোনেন্ট কোনো ব্রাউজার স্টোরেজ (localStorage) ব্যবহার করে না —
-// পেজ রিফ্রেশ করলে চ্যাট হিস্ট্রি মুছে যাবে। ভবিষ্যতে চাইলে ডাটাবেজে সেভ করা যাবে।
+// ডিপ্লোমা ভর্তি সহায়িকার উচ্চ-মানের চ্যাট উইজেট।
+// সম্পূর্ণ বাংলায় ইউজার-ফ্রেন্ডলি চ্যাট অভিজ্ঞতা, কুইক সাজেশন চিপস এবং সুন্দর ভিজ্যুয়াল কমফোর্ট।
 
 import { useState, useRef, useEffect } from "react";
 
 const COLORS = {
   primaryDark: "#0F4C5C",
   primary: "#13687D",
+  primaryLight: "#E6F4F8",
   accent: "#F08C2C",
+  accentHover: "#D6771F",
   bg: "#FFFFFF",
+  chatBg: "#F4F7F6",
   bubbleUser: "#13687D",
-  bubbleBot: "#F1F5F4",
-  text: "#1A2E32",
-  textLight: "#5C7378",
+  bubbleBot: "#FFFFFF",
+  text: "#1E293B",
+  textLight: "#64748B",
+  border: "#E2E8F0",
 };
 
-const I18N = {
-  bn: {
-    title: "পলিটেকনিক গাইড",
-    subtitle: "ডিপ্লোমা ভর্তি সহায়ক · ফ্রি",
-    welcome: "আসসালামু আলাইকুম! আমি পলিটেকনিক গাইড 🎓\nডিপ্লোমা/পলিটেকনিক ভর্তি নিয়ে যেকোনো প্রশ্ন করতে পারেন — আমি ধাপে ধাপে বিস্তারিত বুঝিয়ে দেব।",
-    placeholder: "আপনার প্রশ্ন লিখুন...",
-    disclaimer: "তথ্যটি এআই দ্বারা নিয়ন্ত্রিত হচ্ছে, তাই কিছু তথ্য ভুল হতে পারে। বিস্তারিত জানতে আমাদের ",
-    groupText: "গ্রুপে",
-    disclaimerEnd: " যুক্ত হতে পারেন।",
-    typing: "লিখছি...",
-    errorMsg: "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না। একটু পর আবার চেষ্টা করুন।",
-  },
-  en: {
-    title: "Polytechnic Guide",
-    subtitle: "Diploma Admission Helper · Free",
-    welcome: "Welcome! I am Polytechnic Guide 🎓\nAsk any question regarding Diploma/Polytechnic admission — I will explain step-by-step in detail.",
-    placeholder: "Write your question here...",
-    disclaimer: "Information is AI-controlled and may contain inaccuracies. For details, join our ",
-    groupText: "group",
-    disclaimerEnd: ".",
-    typing: "Typing...",
-    errorMsg: "Sorry, unable to respond at the moment. Please try again later.",
-  }
-};
+const QUICK_PROMPTS = [
+  "🏫 ঢাকা পলিটেকনিকের সিট কত?",
+  "📋 আবেদনের জিপিএ যোগ্যতা কী?",
+  "🎯 চয়েস লিস্ট কীভাবে সাজাব?",
+  "🎁 মহিলা ও ভোকেশনাল কোটা নিয়ম"
+];
 
 function parseMarkdownToReact(text) {
   if (!text) return null;
@@ -55,11 +38,10 @@ function parseMarkdownToReact(text) {
   let listItems = [];
 
   const renderTextWithBold = (txt) => {
-    // Split by markdown bold format: **text**
     const parts = txt.split(/(\*\*.*?\*\*)/g);
     return parts.map((part, index) => {
       if (part.startsWith("**") && part.endsWith("**")) {
-        return <strong key={index}>{part.slice(2, -2)}</strong>;
+        return <strong key={index} style={{ color: COLORS.primaryDark }}>{part.slice(2, -2)}</strong>;
       }
       return part;
     });
@@ -138,8 +120,8 @@ function parseMarkdownToReact(text) {
   const flushList = (key) => {
     if (currentList && listItems.length > 0) {
       const listStyle = currentList === "ul" 
-        ? { margin: "4px 0", paddingLeft: "18px", listStyleType: "disc" }
-        : { margin: "4px 0", paddingLeft: "18px", listStyleType: "decimal" };
+        ? { margin: "6px 0", paddingLeft: "20px", listStyleType: "disc" }
+        : { margin: "6px 0", paddingLeft: "20px", listStyleType: "decimal" };
         
       elements.push(
         currentList === "ul" ? (
@@ -164,21 +146,21 @@ function parseMarkdownToReact(text) {
     if (trimmed.startsWith("### ")) {
       flushList(index);
       elements.push(
-        <h4 key={index} style={{ margin: "8px 0 4px 0", fontWeight: "700", fontSize: "14px", color: COLORS.primaryDark }}>
+        <h4 key={index} style={{ margin: "10px 0 5px 0", fontWeight: "700", fontSize: "14px", color: COLORS.primaryDark }}>
           {renderTextWithLinksAndBold(trimmed.slice(4))}
         </h4>
       );
     } else if (trimmed.startsWith("## ")) {
       flushList(index);
       elements.push(
-        <h3 key={index} style={{ margin: "10px 0 5px 0", fontWeight: "700", fontSize: "15px", color: COLORS.primaryDark }}>
+        <h3 key={index} style={{ margin: "12px 0 6px 0", fontWeight: "700", fontSize: "15px", color: COLORS.primaryDark }}>
           {renderTextWithLinksAndBold(trimmed.slice(3))}
         </h3>
       );
     } else if (trimmed.startsWith("# ")) {
       flushList(index);
       elements.push(
-        <h2 key={index} style={{ margin: "12px 0 6px 0", fontWeight: "700", fontSize: "16px", color: COLORS.primaryDark }}>
+        <h2 key={index} style={{ margin: "14px 0 8px 0", fontWeight: "700", fontSize: "16px", color: COLORS.primaryDark }}>
           {renderTextWithLinksAndBold(trimmed.slice(2))}
         </h2>
       );
@@ -190,7 +172,7 @@ function parseMarkdownToReact(text) {
         currentList = "ul";
       }
       listItems.push(
-        <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
+        <li key={`li-${index}`} style={{ margin: "4px 0", lineHeight: "1.5" }}>
           {renderTextWithLinksAndBold(trimmed.slice(2))}
         </li>
       );
@@ -204,7 +186,7 @@ function parseMarkdownToReact(text) {
       const match = trimmed.match(/^([^\s]+)\s(.*)/);
       const contentText = match ? match[2] : trimmed;
       listItems.push(
-        <li key={`li-${index}`} style={{ margin: "3px 0", lineHeight: "1.4" }}>
+        <li key={`li-${index}`} style={{ margin: "4px 0", lineHeight: "1.5" }}>
           {renderTextWithLinksAndBold(contentText)}
         </li>
       );
@@ -218,7 +200,7 @@ function parseMarkdownToReact(text) {
     else {
       flushList(index);
       elements.push(
-        <div key={index} style={{ margin: "3px 0", lineHeight: "1.45" }}>
+        <div key={index} style={{ margin: "4px 0", lineHeight: "1.5" }}>
           {renderTextWithLinksAndBold(line)}
         </div>
       );
@@ -231,8 +213,9 @@ function parseMarkdownToReact(text) {
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
-  const [language, setLanguage] = useState("bn");
-  const [messages, setMessages] = useState([{ role: "assistant", content: I18N.bn.welcome }]);
+  const WELCOME_MSG = "আসসালামু আলাইকুম! আমি পলিটেকনিক গাইড 🎓\nতোমার বা আপনাদের পলিটেকনিক ভর্তি, চয়েস লিস্ট বা সিট সম্পর্কিত যেকোনো প্রশ্ন করতে পারো — আমি সহজ ভাষায় বিস্তারিত বুঝিয়ে দেব।";
+  
+  const [messages, setMessages] = useState([{ role: "assistant", content: WELCOME_MSG }]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
@@ -241,21 +224,6 @@ export default function ChatWidget() {
   messagesRef.current = messages;
   const isLoadingRef = useRef(isLoading);
   isLoadingRef.current = isLoading;
-  const languageRef = useRef(language);
-  languageRef.current = language;
-
-  const currentI18n = I18N[language] || I18N.bn;
-
-  const handleLanguageChange = (newLang) => {
-    setLanguage(newLang);
-    // If the chat only contains the welcome message, update it to the new language
-    setMessages((prev) => {
-      if (prev.length === 1 && prev[0].role === "assistant") {
-        return [{ role: "assistant", content: I18N[newLang].welcome }];
-      }
-      return prev;
-    });
-  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -267,7 +235,6 @@ export default function ChatWidget() {
     if (typeof window !== "undefined") {
       const isMobile = window.innerWidth <= 600;
       if (isOpen && isMobile) {
-        // Record scroll position and lock body scroll to prevent background scrolling
         const scrollY = window.scrollY;
         document.body.style.position = "fixed";
         document.body.style.top = `-${scrollY}px`;
@@ -275,7 +242,6 @@ export default function ChatWidget() {
         document.body.style.overflow = "hidden";
         document.body.dataset.scrollY = scrollY.toString();
       } else {
-        // Restore background scrolling and previous scroll position
         const scrollY = parseInt(document.body.dataset.scrollY || "0", 10);
         document.body.style.position = "";
         document.body.style.top = "";
@@ -319,7 +285,7 @@ export default function ChatWidget() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages, visitorId, language: languageRef.current }),
+        body: JSON.stringify({ messages: updatedMessages, visitorId }),
       });
       const data = await res.json();
 
@@ -334,7 +300,7 @@ export default function ChatWidget() {
         ...prev,
         {
           role: "assistant",
-          content: currentI18n.errorMsg,
+          content: "দুঃখিত, এই মুহূর্তে উত্তর দিতে পারছি না। একটু পর আবার চেষ্টা করুন।",
         },
       ]);
     } finally {
@@ -372,6 +338,33 @@ export default function ChatWidget() {
   return (
     <div className={isOpen ? "chat-wrapper-open" : "chat-wrapper"} style={styles.wrapper}>
       <style>{`
+        @keyframes pulseDot {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.1); }
+        }
+        .dot1 { animation: pulseDot 1.4s infinite 0s; }
+        .dot2 { animation: pulseDot 1.4s infinite 0.2s; }
+        .dot3 { animation: pulseDot 1.4s infinite 0.4s; }
+
+        .chip-btn {
+          background: #FFFFFF;
+          border: 1px solid #CBD5E1;
+          color: #0F4C5C;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .chip-btn:hover {
+          background: #13687D;
+          color: #FFFFFF;
+          border-color: #13687D;
+        }
+
         @media (max-width: 600px) {
           .chat-wrapper-open {
             position: fixed !important;
@@ -407,51 +400,44 @@ export default function ChatWidget() {
           }
         }
       `}</style>
+
       {isOpen && (
         <div className="chat-panel" style={styles.panel}>
           {/* Header */}
           <div style={styles.header}>
-            <div>
-              <div style={styles.headerTitle}>{currentI18n.title}</div>
-              <div style={styles.headerSubtitle}>
-                {currentI18n.subtitle}
+            <div style={styles.headerAvatarContainer}>
+              <div style={styles.avatarCircle}>🎓</div>
+              <div>
+                <div style={styles.headerTitle}>পলিটেকনিক গাইড AI</div>
+                <div style={styles.headerSubtitle}>
+                  <span style={styles.onlineDot} /> অনলাইন সাহায্যকারী
+                </div>
               </div>
-            </div>
-
-            {/* Language Switcher Pills */}
-            <div style={styles.langContainer}>
-              <button
-                onClick={() => handleLanguageChange("bn")}
-                style={{
-                  ...styles.langPill,
-                  background: language === "bn" ? COLORS.accent : "rgba(255,255,255,0.15)",
-                  fontWeight: language === "bn" ? "700" : "500",
-                }}
-              >
-                বাংলা
-              </button>
-              <button
-                onClick={() => handleLanguageChange("en")}
-                style={{
-                  ...styles.langPill,
-                  background: language === "en" ? COLORS.accent : "rgba(255,255,255,0.15)",
-                  fontWeight: language === "en" ? "700" : "500",
-                }}
-              >
-                English
-              </button>
             </div>
 
             <button
               onClick={() => setIsOpen(false)}
               style={styles.closeBtn}
-              aria-label="Close"
+              aria-label="বন্ধ করুন"
             >
               ✕
             </button>
           </div>
 
-          {/* Messages */}
+          {/* Quick Chips Bar (shown at top of messages) */}
+          <div style={styles.chipsContainer}>
+            {QUICK_PROMPTS.map((promptText, idx) => (
+              <button
+                key={idx}
+                className="chip-btn"
+                onClick={() => sendMessage(promptText.replace(/^[^\s]+\s/, ""))}
+              >
+                {promptText}
+              </button>
+            ))}
+          </div>
+
+          {/* Messages Container */}
           <div style={styles.messages} ref={scrollRef}>
             {messages.map((m, i) => (
               <div
@@ -461,37 +447,47 @@ export default function ChatWidget() {
                   justifyContent: m.role === "user" ? "flex-end" : "flex-start",
                 }}
               >
+                {m.role === "assistant" && (
+                  <div style={styles.msgBotAvatar}>🎓</div>
+                )}
                 <div
                   style={{
                     ...styles.bubble,
                     background:
                       m.role === "user" ? COLORS.bubbleUser : COLORS.bubbleBot,
-                    color: m.role === "user" ? "#fff" : COLORS.text,
+                    color: m.role === "user" ? "#FFFFFF" : COLORS.text,
+                    border: m.role === "user" ? "none" : `1px solid ${COLORS.border}`,
                     borderBottomRightRadius: m.role === "user" ? 4 : 16,
                     borderBottomLeftRadius: m.role === "user" ? 16 : 4,
-                    whiteSpace: m.role === "user" ? "pre-wrap" : "normal",
+                    boxShadow: m.role === "user" ? "0 2px 8px rgba(19,104,125,0.25)" : "0 2px 6px rgba(0,0,0,0.04)",
                   }}
                 >
                   {m.role === "user" ? m.content : parseMarkdownToReact(m.content)}
                 </div>
               </div>
             ))}
+
             {isLoading && (
               <div style={{ ...styles.msgRow, justifyContent: "flex-start" }}>
-                <div style={{ ...styles.bubble, background: COLORS.bubbleBot, color: COLORS.textLight }}>
-                  {currentI18n.typing}
+                <div style={styles.msgBotAvatar}>🎓</div>
+                <div style={{ ...styles.bubble, background: COLORS.bubbleBot, border: `1px solid ${COLORS.border}`, padding: "12px 18px" }}>
+                  <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
+                    <span className="dot1" style={styles.typingDot}></span>
+                    <span className="dot2" style={styles.typingDot}></span>
+                    <span className="dot3" style={styles.typingDot}></span>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Input */}
+          {/* Input Area */}
           <div style={styles.inputRow}>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={currentI18n.placeholder}
+              placeholder="পলিটেকনিক বা ভর্তি নিয়ে প্রশ্ন লিখুন..."
               style={styles.textarea}
               rows={1}
             />
@@ -502,29 +498,29 @@ export default function ChatWidget() {
                 ...styles.sendBtn,
                 opacity: isLoading || !input.trim() ? 0.5 : 1,
               }}
-              aria-label="Send"
+              aria-label="পাঠান"
             >
               ➤
             </button>
           </div>
 
-          {/* Disclaimer */}
+          {/* Disclaimer Footer */}
           <div style={styles.disclaimer}>
-            {currentI18n.disclaimer}
+            অফিশিয়াল ভর্তি সহায়তার জন্য আমাদের{" "}
             <a
               href="https://www.facebook.com/groups/1834671093536020"
               target="_blank"
               rel="noopener noreferrer"
               style={styles.disclaimerLink}
             >
-              {currentI18n.groupText}
-            </a>
-            {currentI18n.disclaimerEnd}
+              ফেসবুক গ্রুপে
+            </a>{" "}
+            যুক্ত থাকুন।
           </div>
         </div>
       )}
 
-      {/* Floating bubble button */}
+      {/* Floating Chat Launcher Button */}
       <button
         onClick={() => setIsOpen((v) => !v)}
         className={isOpen ? "chat-fab-hidden" : "chat-fab"}
@@ -540,127 +536,179 @@ export default function ChatWidget() {
 const styles = {
   wrapper: {
     position: "fixed",
-    bottom: 20,
-    right: 20,
+    bottom: 24,
+    right: 24,
     zIndex: 9999,
     fontFamily:
       "'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif",
   },
   fab: {
-    width: 58,
-    height: 58,
+    width: 60,
+    height: 60,
     borderRadius: "50%",
     border: "none",
     background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
     color: "#fff",
-    fontSize: 24,
+    fontSize: 26,
     cursor: "pointer",
-    boxShadow: "0 6px 18px rgba(15,76,92,0.35)",
+    boxShadow: "0 8px 24px rgba(15,76,92,0.4)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    transition: "transform 0.2s ease, boxShadow 0.2s ease",
   },
   panel: {
-    width: 340,
-    maxWidth: "calc(100vw - 40px)",
-    height: 460,
-    maxHeight: "calc(100vh - 120px)",
+    width: 375,
+    maxWidth: "calc(100vw - 32px)",
+    height: 540,
+    maxHeight: "calc(100vh - 100px)",
     background: COLORS.bg,
-    borderRadius: 16,
-    boxShadow: "0 10px 40px rgba(0,0,0,0.18)",
+    borderRadius: 20,
+    boxShadow: "0 12px 48px rgba(0,0,0,0.18)",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
     marginBottom: 12,
+    border: `1px solid ${COLORS.border}`,
   },
   header: {
-    background: `linear-gradient(135deg, ${COLORS.primary}, ${COLORS.primaryDark})`,
+    background: `linear-gradient(135deg, ${COLORS.primaryDark}, ${COLORS.primary})`,
     color: "#fff",
-    padding: "14px 16px",
+    padding: "16px 18px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  headerTitle: { fontWeight: 700, fontSize: 15 },
-  headerSubtitle: { fontSize: 12, opacity: 0.85, marginTop: 2 },
+  headerAvatarContainer: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: "50%",
+    background: "rgba(255, 255, 255, 0.2)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 20,
+  },
+  headerTitle: { fontWeight: 700, fontSize: 16, color: "#FFFFFF" },
+  headerSubtitle: { fontSize: 12, opacity: 0.9, marginTop: 2, display: "flex", alignItems: "center", gap: 5 },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: "50%",
+    backgroundColor: "#10B981",
+    display: "inline-block",
+  },
   closeBtn: {
-    background: "transparent",
+    background: "rgba(255,255,255,0.15)",
     border: "none",
     color: "#fff",
     fontSize: 16,
+    width: 32,
+    height: 32,
+    borderRadius: "50%",
     cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipsContainer: {
+    display: "flex",
+    gap: 8,
+    padding: "10px 14px",
+    background: COLORS.primaryLight,
+    borderBottom: `1px solid ${COLORS.border}`,
+    overflowX: "auto",
+    scrollbarWidth: "none",
   },
   messages: {
     flex: 1,
     overflowY: "auto",
-    padding: "14px",
+    padding: "16px 14px",
     display: "flex",
     flexDirection: "column",
-    gap: 10,
-    background: "#FAFBFB",
+    gap: 12,
+    background: COLORS.chatBg,
   },
-  msgRow: { display: "flex" },
+  msgRow: { display: "flex", gap: 8, alignItems: "flex-end" },
+  msgBotAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: "50%",
+    background: COLORS.primaryLight,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 14,
+    flexShrink: 0,
+    marginBottom: 4,
+  },
   bubble: {
-    maxWidth: "80%",
-    padding: "9px 13px",
+    maxWidth: "82%",
+    padding: "10px 14px",
     borderRadius: 16,
-    fontSize: 13.5,
-    lineHeight: 1.5,
+    fontSize: 14,
+    lineHeight: 1.55,
     whiteSpace: "pre-wrap",
+  },
+  typingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: "50%",
+    backgroundColor: COLORS.primary,
+    display: "inline-block",
   },
   inputRow: {
     display: "flex",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 8,
-    padding: 10,
-    borderTop: "1px solid #ECECEC",
+    padding: "12px 14px",
+    background: "#FFFFFF",
+    borderTop: `1px solid ${COLORS.border}`,
   },
   textarea: {
     flex: 1,
     resize: "none",
-    border: "1px solid #DDE3E3",
-    borderRadius: 10,
-    padding: "9px 11px",
-    fontSize: 16, // Prevents mobile browsers (iOS/Android) from auto-zooming on focus
+    border: `1px solid ${COLORS.border}`,
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontSize: 16, // Prevents iOS/Android input zoom
     fontFamily: "inherit",
     outline: "none",
     maxHeight: 90,
+    background: "#F8FAFC",
+    color: COLORS.text,
   },
   sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     border: "none",
-    background: COLORS.accent,
+    background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.accentHover})`,
     color: "#fff",
-    fontSize: 15,
+    fontSize: 16,
     cursor: "pointer",
     flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 3px 10px rgba(240,140,44,0.3)",
   },
   disclaimer: {
-    fontSize: 11,
+    fontSize: 11.5,
     color: COLORS.textLight,
     textAlign: "center",
-    padding: "0px 14px 10px 14px",
-    background: COLORS.bg,
+    padding: "6px 14px 10px 14px",
+    background: "#FFFFFF",
     lineHeight: "1.4",
   },
   disclaimerLink: {
     color: COLORS.primary,
     fontWeight: "600",
     textDecoration: "underline",
-  },
-  langContainer: {
-    display: "flex",
-    gap: 3,
-    background: "rgba(0, 0, 0, 0.25)",
-    padding: "3px",
-    borderRadius: 20,
-  },
-  langPill: {
-    border: "none",
-    color: "#fff",
-    fontSize: 10.5,
-    padding: "3px 7px",
-    borderRadius: 14,
-    cursor: "pointer",
-    transition: "all 0.2s ease",
   },
 };
