@@ -3,7 +3,7 @@
 // components/ChatWidget.js
 //
 // ডিপ্লোমা ভর্তি সহায়িকার চ্যাট উইজেট।
-// সম্পূর্ণ বাংলায় ইউজার-ফ্রেন্ডলি চ্যাট অভিজ্ঞতা ও সুন্দর ভিজ্যুয়াল কমফোর্ট।
+// সম্পূর্ণ বাংলায় ইউজার-ফ্রেন্ডলি চ্যাট অভিজ্ঞতা, রিয়েল-টাইম এনিমেশন ও ভিজ্যুয়াল কমফোর্ট।
 
 import { useState, useRef, useEffect } from "react";
 
@@ -331,13 +331,29 @@ export default function ChatWidget() {
   return (
     <div className={isOpen ? "chat-wrapper-open" : "chat-wrapper"} style={styles.wrapper}>
       <style>{`
-        @keyframes pulseDot {
-          0%, 100% { opacity: 0.3; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1.1); }
+        @keyframes spinRing {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
         }
-        .dot1 { animation: pulseDot 1.4s infinite 0s; }
-        .dot2 { animation: pulseDot 1.4s infinite 0.2s; }
-        .dot3 { animation: pulseDot 1.4s infinite 0.4s; }
+        @keyframes pulseGlow {
+          0%, 100% { opacity: 0.7; transform: scale(0.98); }
+          50% { opacity: 1; transform: scale(1.01); }
+        }
+
+        .spin-ring {
+          width: 16px;
+          height: 16px;
+          border: 2px solid rgba(19, 104, 125, 0.2);
+          border-top: 2px solid #13687D;
+          border-radius: 50%;
+          animation: spinRing 0.8s linear infinite;
+          display: inline-block;
+          flex-shrink: 0;
+        }
+
+        .research-card {
+          animation: pulseGlow 2s ease-in-out infinite;
+        }
 
         @media (max-width: 600px) {
           .chat-wrapper-open {
@@ -428,14 +444,19 @@ export default function ChatWidget() {
               </div>
             ))}
 
+            {/* Live Search & Researching Animation State */}
             {isLoading && (
               <div style={{ ...styles.msgRow, justifyContent: "flex-start" }}>
                 <div style={styles.msgBotAvatar}>🎓</div>
-                <div style={{ ...styles.bubble, background: COLORS.bubbleBot, border: `1px solid ${COLORS.border}`, padding: "12px 18px" }}>
-                  <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-                    <span className="dot1" style={styles.typingDot}></span>
-                    <span className="dot2" style={styles.typingDot}></span>
-                    <span className="dot3" style={styles.typingDot}></span>
+                <div className="research-card" style={styles.researchBubble}>
+                  <div style={styles.researchHeader}>
+                    <div className="spin-ring" />
+                    <span style={styles.researchTitle}>
+                      🔍 বোর্ডের অফিশিয়াল ওয়েবসাইট থেকে তথ্য খোঁজা হচ্ছে...
+                    </span>
+                  </div>
+                  <div style={styles.researchSubtext}>
+                    অনুগ্রহ করে অপেক্ষা করো, রিয়েল-টাইম তথ্য বিশ্লেষণ করে উত্তর তৈরি করছি ✨
                   </div>
                 </div>
               </div>
@@ -607,12 +628,31 @@ const styles = {
     lineHeight: 1.55,
     whiteSpace: "pre-wrap",
   },
-  typingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
-    backgroundColor: COLORS.primary,
-    display: "inline-block",
+  researchBubble: {
+    maxWidth: "85%",
+    padding: "12px 14px",
+    borderRadius: 16,
+    background: "#FFFFFF",
+    border: `1px solid ${COLORS.primary}`,
+    boxShadow: "0 4px 14px rgba(19, 104, 125, 0.12)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  researchHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  researchTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: COLORS.primaryDark,
+  },
+  researchSubtext: {
+    fontSize: 11.5,
+    color: COLORS.textLight,
+    paddingLeft: 24,
   },
   inputRow: {
     display: "flex",
